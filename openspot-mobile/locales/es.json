@@ -54,7 +54,8 @@
     "speed": "Velocidad",
     "lyrics": "Letra",
     "stream_error_title": "Error de reproducción",
-    "stream_error_message": "Lo sentimos, no se pudo cargar la canción. Prueba con otra."
+    "stream_error_message": "Lo sentimos, no se pudo cargar la canción. Prueba con otra.",
+    "remote_playback_disabled": "La reproducción de YouTube no está disponible temporalmente. Inténtalo más tarde."
   },
   "components": {
     "queue": "Cola",

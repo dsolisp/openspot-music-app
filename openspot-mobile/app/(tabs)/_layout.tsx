@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
+import { darkColors, lightColors } from '@/src/ui/theme/tokens';
 
 interface PlatformUpdateConfig {
   latest_version: string;
@@ -34,27 +35,7 @@ interface UpdateConfig {
 
 const UPDATE_CONFIG_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-config/refs/heads/main/update-mobile.json';
 
-interface MusicPlayerContextType {
-  musicQueue: ReturnType<typeof useMusicQueue>;
-  isPlaying: boolean;
-  currentTrack: Track | null;
-  handleTrackSelect: (track: Track, trackList?: Track[], startIndex?: number) => void;
-  handleQueueTrackSelect: (track: Track, index: number) => void;
-  handlePlayingStateChange: (playing: boolean) => void;
-  toggleQueue: () => void;
-  setPendingAutoPlay: () => void;
-}
-
-export const MusicPlayerContext = createContext<MusicPlayerContextType>({
-  musicQueue: {} as ReturnType<typeof useMusicQueue>,
-  isPlaying: false,
-  currentTrack: null,
-  handleTrackSelect: () => {},
-  handleQueueTrackSelect: () => {},
-  handlePlayingStateChange: () => {},
-  toggleQueue: () => {},
-  setPendingAutoPlay: () => {},
-});
+import { MusicPlayerContext } from '@/src/context/MusicPlayerContext';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -68,19 +49,20 @@ export default function TabLayout() {
   const { isOffline } = useConnectivity();
   const router = useRouter();
   const pathname = usePathname();
-  const { isProviderDisabled } = useApiStatus();
+  const { isYouTubeDisabled } = useApiStatus();
   const { toastMessage, toastType, showToast } = useToast();
 
   const isIOS = Platform.OS === 'ios';
+  const c = useMemo(() => (isDark ? darkColors : lightColors), [isDark]);
   const tabTheme = useMemo(
     () => ({
       background: isDark ? '#121212' : '#fffaf2',
       border: isDark ? '#272727' : '#e4d5c5',
-      active: isDark ? (isIOS ? '#038434' : '#1DB954') : '#167c3a',
+      active: c.neonPrimary,
       inactive: isDark ? (isIOS ? '#646464' : '#9a9a9a') : '#7a6251',
       safeArea: isDark ? '#050505' : '#f5efe6',
     }),
-    [isDark, isIOS]
+    [isDark, isIOS, c.neonPrimary]
   );
 
   const [updateConfig, setUpdateConfig] = useState<UpdateConfig | null>(null);
@@ -104,6 +86,8 @@ export default function TabLayout() {
     : null;
 
   useEffect(() => {
+    // Legacy update check disabled for AURA migration
+    /*
     const checkUpdateOnStart = async () => {
       try {
         const res = await fetch(UPDATE_CONFIG_URL);
@@ -123,6 +107,7 @@ export default function TabLayout() {
       }
     };
     void checkUpdateOnStart();
+    */
   }, [currentVersion]);
 
   const pendingAutoPlayRef = useRef(false);
@@ -137,9 +122,8 @@ export default function TabLayout() {
   );
 
   const handleTrackSelect = (track: Track, trackList?: Track[], startIndex?: number) => {
-    const trackProvider = track.provider || 'saavn';
-    if (isProviderDisabled(trackProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
+    if (isYouTubeDisabled()) {
+      showToast(t('player.remote_playback_disabled'), 'error');
       return;
     }
 
@@ -179,9 +163,8 @@ export default function TabLayout() {
   };
 
   const handleQueueTrackSelect = (track: Track, index: number) => {
-    const trackProvider = track.provider || 'saavn';
-    if (isProviderDisabled(trackProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
+    if (isYouTubeDisabled()) {
+      showToast(t('player.remote_playback_disabled'), 'error');
       return;
     }
 
@@ -210,12 +193,15 @@ export default function TabLayout() {
     setIsQueueOpen(false);
   };
 
+  // Removed aggressive offline redirect to prevent blocking the UI on launch
+  /*
   useEffect(() => {
     if (!isOffline) return;
     if (!pathname?.includes('/downloads')) {
       router.replace('/downloads');
     }
   }, [isOffline, pathname, router]);
+  */
 
   return (
     <MusicPlayerContext.Provider
@@ -235,19 +221,19 @@ export default function TabLayout() {
           {isOffline && !pathname?.includes('/downloads') && <OfflineBanner />}
           <Tabs
             screenOptions={{
-              tabBarActiveTintColor: tabTheme.active,
+              tabBarActiveTintColor: c.neonPrimary,
               tabBarInactiveTintColor: tabTheme.inactive,
               headerShown: false,
               tabBarButton: HapticTab,
               tabBarBackground: TabBarBackground,
               tabBarStyle: {
-                backgroundColor: tabTheme.background,
-                borderTopWidth: 1,
-                borderTopColor: tabTheme.border,
+                backgroundColor: 'transparent',
+                borderTopWidth: 0,
                 // height: insets.bottom,
               },
               tabBarLabelStyle: {
                 paddingBottom: 0,
+                fontSize: 11,
               },
             }}
           >
@@ -306,9 +292,9 @@ export default function TabLayout() {
             <View
               style={{
                 position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 50 + insets.bottom,
+                left: 8, // Floating effect
+                right: 8,
+                bottom: 65 + insets.bottom, // Lifted up
                 zIndex: 100,
               }}
             >
@@ -361,7 +347,7 @@ export default function TabLayout() {
         </Modal>
 
         {toastMessage && (
-          <View style={[styles.toastContainer, { backgroundColor: toastType === 'error' ? '#ff4444' : '#1DB954' }]}>
+          <View style={[styles.toastContainer, { backgroundColor: toastType === 'error' ? '#ff4444' : c.neonPrimary }]}>
             <Ionicons name={toastType === 'error' ? 'alert-circle' : 'checkmark-circle'} size={20} color="#fff" style={styles.toastIcon} />
             <Text style={styles.toastText}>{toastMessage}</Text>
           </View>

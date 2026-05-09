@@ -30,6 +30,7 @@ import { DownloadButton } from './DownloadButton';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import TrackPlayer, { RepeatMode } from 'react-native-track-player';
+import { darkColors, lightColors } from '@/src/ui/theme/tokens';
 
 const ROTATING_COVER_KEY = 'openspot_rotating_cover_v1';
 
@@ -108,6 +109,7 @@ export function FullScreenPlayer({
   const isDark = colorScheme !== 'light';
   const { isLiked, toggleLike } = useLikedSongs();
   const { t } = useTranslation();
+  const c = useMemo(() => (isDark ? darkColors : lightColors), [isDark]);
 
   const theme = useMemo(
     () => ({
@@ -116,14 +118,14 @@ export function FullScreenPlayer({
       glassBorder: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)',
       textPrimary: isDark ? '#ffffff' : '#1e1e2a',
       textSecondary: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.7)',
-      accent: '#1DB954',
-      accentGlow: isDark ? 'rgba(29,185,84,0.3)' : 'rgba(29,185,84,0.15)',
+      accent: c.neonPrimary,
+      accentGlow: c.neonGlow,
       track: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)',
       icon: isDark ? '#ffffff' : '#1e1e2a',
       shadow: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.1)',
       danger: '#FF3B30',
     }),
-    [isDark]
+    [isDark, c.neonPrimary, c.neonGlow]
   );
 
   const [isSeeking, setIsSeeking] = useState(false);
@@ -336,13 +338,14 @@ export function FullScreenPlayer({
   }, [onQueueToggle]);
 
   const handleArtistPress = useCallback(() => {
+    if (!track) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
     router.push({
       pathname: '/search',
       params: { q: track.artist, type: 'artist' }
     });
-  }, [router, track?.artist, onClose]);
+  }, [router, track, onClose]);
 
   const handleSliderStart = useCallback(() => {
     setIsSeeking(true);
@@ -735,7 +738,7 @@ export function FullScreenPlayer({
                     style={[
                       styles.playButton,
                       isLandscape && styles.playButtonLandscape,
-                      { backgroundColor: theme.accent },
+                      { backgroundColor: theme.accent, shadowColor: theme.accent },
                     ]}
                   >
                     <Ionicons name={isPlaying ? 'pause' : 'play'} size={isLandscape ? 30 : 32} color="#fff" />
@@ -786,12 +789,12 @@ export function FullScreenPlayer({
                         color={repeatMode !== RepeatMode.Off ? theme.accent : theme.textSecondary}
                       />
                       {repeatMode === RepeatMode.Track && (
-                        <View style={styles.repeatBadgeMini}>
+                        <View style={[styles.repeatBadgeMini, { backgroundColor: theme.accent }]}>
                           <Text style={styles.repeatBadgeMiniText}>1</Text>
                         </View>
                       )}
                       {repeatMode === RepeatMode.Queue && (
-                        <View style={styles.repeatBadgeMini}>
+                        <View style={[styles.repeatBadgeMini, { backgroundColor: theme.accent }]}>
                           <Text style={styles.repeatBadgeMiniText}>∞</Text>
                         </View>
                       )}
@@ -989,7 +992,7 @@ const styles = StyleSheet.create({
     borderRadius: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1DB954',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -1028,7 +1031,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: -6,
-    backgroundColor: '#1DB954',
+    backgroundColor: '#000',
     borderRadius: 6,
     minWidth: 14,
     height: 14,

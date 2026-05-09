@@ -1,6 +1,6 @@
 export interface Track {
   id: string | number;
-  provider?: 'saavn' | 'ytmusic';
+  provider?: 'ytmusic';
   title: string;
   artist: string;
   artistId: number;
@@ -134,5 +134,6 @@ export interface SearchResponse {
 export interface SearchParams {
   q: string;
   offset?: number;
+  page?: number;
   type?: 'track' | 'album' | 'artist' | 'playlist';
 } 

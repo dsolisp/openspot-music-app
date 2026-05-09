@@ -19,6 +19,7 @@ import { MusicAPI } from '@/lib/music-api';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
+import { darkColors, glass, lightColors, radii, space, type } from '@/src/ui/theme/tokens';
 
 interface MusicQueueInterface {
   tracks: Track[];
@@ -49,23 +50,24 @@ export function QueueDisplay({
   const { t } = useTranslation();
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
+  const c = useMemo(() => (isDark ? darkColors : lightColors), [isDark]);
   const flatListRef = useRef<FlatListType<Track>>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isLandscape = windowWidth > windowHeight;
 
   const theme = useMemo(
     () => ({
-      base: isDark ? '#000000' : '#f5efe6',
-      glass: isDark ? 'rgba(255,255,255,0.08)' : 'transparent',
-      glassBorder: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
-      textPrimary: isDark ? '#ffffff' : '#1a1a1a',
-      textSecondary: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-      accent: isDark ? '#1DB954' : '#167c3a',
-      track: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
-      icon: isDark ? '#ffffff' : '#1a1a1a',
-      disabled: isDark ? '#444' : '#ccc',
+      base: isDark ? '#05060A' : '#f5efe6',
+      glass: c.surfaceGlass,
+      glassBorder: `rgba(255,255,255,${glass.borderAlpha})`,
+      textPrimary: c.onSurface,
+      textSecondary: c.onSurfaceMuted,
+      accent: c.neonPrimary,
+      track: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(45,34,25,0.10)',
+      icon: c.onSurface,
+      disabled: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(45,34,25,0.32)',
     }),
-    [isDark]
+    [isDark, c]
   );
 
   useEffect(() => {
@@ -292,66 +294,66 @@ export function QueueDisplay({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   blurContainer: { flex: 1 },
-  header: { paddingTop: 20, paddingBottom: 10 },
-  headerLandscape: { paddingTop: 8, paddingBottom: 4 },
-  headerGradient: { paddingVertical: 20 },
-  headerGradientLandscape: { paddingVertical: 12 },
+  header: { paddingTop: space.lg, paddingBottom: space.sm },
+  headerLandscape: { paddingTop: space.sm, paddingBottom: space.xs },
+  headerGradient: { paddingVertical: space.lg },
+  headerGradientLandscape: { paddingVertical: space.md },
   headerContent: { alignItems: 'center' },
   closeButton: {
     position: 'absolute',
     top: 0,
-    right: 20,
+    right: space.md,
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
-  headerTitleLandscape: { fontSize: 18, marginBottom: 4 },
-  headerSubtitle: { fontSize: 16 },
-  headerSubtitleLandscape: { fontSize: 14 },
+  headerTitle: { ...type.title, marginBottom: space.xs },
+  headerTitleLandscape: { ...type.titleMedium, marginBottom: 4 },
+  headerSubtitle: { ...type.body },
+  headerSubtitleLandscape: { ...type.label },
   queueControls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
     borderBottomWidth: 1,
   },
   queueControlsLandscape: {
-    paddingVertical: 8,
+    paddingVertical: space.sm,
   },
-  controlButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20 },
-  activeControlButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20 },
-  controlButtonText: { fontSize: 12, marginLeft: 6 },
-  activeControlButtonText: { fontSize: 12, marginLeft: 6 },
-  listContainer: { paddingVertical: 8 },
-  listContainerLandscape: { paddingVertical: 4 },
+  controlButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: radii.pill },
+  activeControlButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: radii.pill },
+  controlButtonText: { ...type.label, marginLeft: 6 },
+  activeControlButtonText: { ...type.label, marginLeft: 6 },
+  listContainer: { paddingVertical: space.sm },
+  listContainerLandscape: { paddingVertical: space.xs },
   trackItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radii.md,
     marginVertical: 2,
     marginHorizontal: 4,
   },
   trackItemLandscape: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.sm,
   },
   currentTrackItem: {},
-  trackNumber: { width: 24, alignItems: 'center', marginRight: 12 },
-  trackNumberText: { fontSize: 14 },
-  albumCover: { width: 40, height: 40, borderRadius: 4, marginRight: 12 },
+  trackNumber: { width: 24, alignItems: 'center', marginRight: space.md },
+  trackNumberText: { ...type.label },
+  albumCover: { width: 40, height: 40, borderRadius: radii.sm, marginRight: space.md },
   trackInfo: { flex: 1, justifyContent: 'center' },
-  trackTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  trackArtist: { fontSize: 12, marginBottom: 2 },
-  trackDuration: { fontSize: 10 },
+  trackTitle: { ...type.bodyMedium, marginBottom: 2 },
+  trackArtist: { ...type.label, marginBottom: 2 },
+  trackDuration: { ...type.label },
   trackActions: { flexDirection: 'row', alignItems: 'center' },
   actionButton: { padding: 8, marginLeft: 4 },
   playingIndicator: { marginLeft: 8, padding: 4 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyTitle: { fontSize: 20, fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, textAlign: 'center' },
+  emptyTitle: { ...type.title, marginTop: space.md, marginBottom: space.xs },
+  emptySubtitle: { ...type.body, textAlign: 'center' },
 });

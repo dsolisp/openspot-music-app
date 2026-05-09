@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="neonStroke" x1="224" y1="224" x2="800" y2="800" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#20F2FF"/>
+      <stop offset="1" stop-color="#B35CFF"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="1 0 0 0 0
+                0 1 0 0 0
+                0 0 1 0 0
+                0 0 0 0.65 0" result="glowOut"/>
+      <feMerge>
+        <feMergeNode in="glowOut"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <mask id="waveCut">
+      <rect width="1024" height="1024" fill="white"/>
+      <!-- waveform cutout -->
+      <path d="M310 520c42-66 78-66 120 0s78 66 120 0 78-66 120 0 78 66 120 0"
+            stroke="black" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+
+  <!-- two interlocking arcs (spot/loop) -->
+  <g filter="url(#glow)" mask="url(#waveCut)">
+    <path d="M270 512c0-150 122-272 272-272 116 0 218 74 258 178"
+          stroke="url(#neonStroke)" stroke-width="64" stroke-linecap="round"/>
+    <path d="M754 512c0 150-122 272-272 272-116 0-218-74-258-178"
+          stroke="url(#neonStroke)" stroke-width="64" stroke-linecap="round"/>
+    <!-- inner spot -->
+    <circle cx="512" cy="512" r="70" stroke="url(#neonStroke)" stroke-width="44"/>
+  </g>
+</svg>
+

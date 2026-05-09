@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "OpenSpot",
+    "name": "AURA",
     "slug": "OpenSpot",
-    "version": "3.1.4",
+    "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "openspot",
@@ -25,7 +25,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#667eea"
+        "backgroundColor": "#05060A"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.devx.openspot",
@@ -33,10 +33,10 @@
       "foregroundService": {
         "type": "mediaPlayback",
         "notification": {
-          "title": "OpenSpot",
-          "body": "Playing music in background",
+          "title": "AURA",
+          "body": "Immersive music experience",
           "icon": "./assets/images/icon.png",
-          "color": "#1DB954"
+          "color": "#667eea"
         }
       },
       "permissions": [
@@ -56,17 +56,31 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "updates": {
+      "url": "https://u.expo.dev/9bdc364f-a6a2-4822-9a55-2bf8361ba269",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
+    },
     "plugins": [
       "expo-router",
       "expo-dev-client",
       "expo-screen-orientation",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.24",
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#667eea"
+          "backgroundColor": "#05060A"
         }
       ],
       [
@@ -90,8 +104,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "504a7da3-cce0-4ab0-a5b7-a4348ed50ce8"
+        "projectId": "9bdc364f-a6a2-4822-9a55-2bf8361ba269"
       }
-    }
+    },
+    "owner": "dsolisp87"
   }
 }

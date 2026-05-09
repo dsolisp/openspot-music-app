@@ -10,12 +10,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Track } from '../types/music';
 import { PlaylistStorage } from '@/lib/playlist-storage';
 import { useTranslation } from 'react-i18next';
 import { MusicAPI } from '../lib/music-api';
+import { getDownloadByTrackId, upsertDownload, removeDownloadByTrackId } from '@/src/storage/downloadsRepo';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { darkColors, lightColors } from '@/src/ui/theme/tokens';
 
 
 const ANIMATION_DURATION = 350;
@@ -39,13 +41,17 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
   style,
   onDownloaded,
   iconColor = '#fff',
-  accentColor = '#1DB954',
+  accentColor,
   showNotification,
   iconSize,
   showText = false,
   textColor
 }) => {
   const { t } = useTranslation();
+  const scheme = useColorScheme();
+  const isDark = scheme !== 'light';
+  const c = isDark ? darkColors : lightColors;
+  const resolvedAccent = accentColor ?? c.neonPrimary;
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -67,19 +73,18 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
       if (!track || !track.id) return;
 
       try {
-        const offlineData = await AsyncStorage.getItem(`offline_${track.id}`);
+        const row = await getDownloadByTrackId(track.id);
         if (!isMounted) return;
 
-        if (offlineData) {
-          const { fileUri } = JSON.parse(offlineData);
-          if (typeof fileUri === 'string') {
-            const fileInfo = await FileSystem.getInfoAsync(fileUri);
-            if (isMounted) {
-              setIsDownloaded(fileInfo.exists);
+        if (row?.file_uri) {
+          const fileInfo = await FileSystem.getInfoAsync(row.file_uri);
+          if (isMounted) {
+            if (fileInfo.exists) {
+              setIsDownloaded(true);
+            } else {
+              setIsDownloaded(false);
+              void removeDownloadByTrackId(track.id).catch(() => {});
             }
-          } else {
-            if (isMounted) setIsDownloaded(false);
-            await AsyncStorage.removeItem(`offline_${track.id}`);
           }
         } else {
           if (isMounted) setIsDownloaded(false);
@@ -207,12 +212,12 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
         console.warn('Thumbnail download failed, continuing without it:', e);
       }
 
-      await AsyncStorage.setItem(`offline_${track.id}`, JSON.stringify({
-        fileUri: result.uri,
-        thumbUri: track.images?.large ? thumbUri : null,
-        trackData: track,
-        downloadedAt: new Date().toISOString(),
-      }));
+      await upsertDownload({
+        track,
+        file_uri: result.uri,
+        thumb_uri: track.images?.large ? thumbUri : null,
+        downloaded_at: new Date().toISOString(),
+      });
 
       setIsDownloaded(true);
       showNotification(t('components.downloaded') || 'Downloaded', 'success'); 
@@ -240,7 +245,7 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
         if (thumbInfo.exists) {
           await FileSystem.deleteAsync(thumbUri);
         }
-        await AsyncStorage.removeItem(`offline_${track?.id}`);
+        await removeDownloadByTrackId(track?.id);
       } catch (cleanupError) {
         console.error("Error during cleanup after download failure:", cleanupError);
       }
@@ -264,7 +269,7 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
     } else if (isDownloading) {
       return (
         <Animated.View style={{ transform: [{ translateY: bounceAnim }] }}>
-          <Ionicons name="cloud-download-outline" size={size} color={accentColor} />
+          <Ionicons name="cloud-download-outline" size={size} color={resolvedAccent} />
         </Animated.View>
       );
     } else {

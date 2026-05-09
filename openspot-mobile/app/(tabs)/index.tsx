@@ -3,7 +3,7 @@ import { View, StyleSheet, StatusBar, Text, TouchableOpacity, ScrollView, Modal,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSearch } from '@/hooks/useSearch';
 import { TopBar } from '@/components/TopBar';
-import { MusicPlayerContext } from './_layout';
+import { MusicPlayerContext } from '@/src/context/MusicPlayerContext';
 import { MusicAPI } from '@/lib/music-api';
 import { Track } from '@/types/music';
 import { Image } from 'expo-image';
@@ -17,6 +17,10 @@ import { COUNTRY_NAMES } from '@/constants/countryNames';
 import { useTranslation } from 'react-i18next';
 import { useThemeMode, ThemeMode } from '@/hooks/theme-mode';
 import { useConnectivity } from '@/hooks/useConnectivity';
+import { useQuery } from '@tanstack/react-query';
+import { openQueryKeys } from '@/src/state/queryKeys';
+import { GlassCard } from '@/src/ui/components';
+import { darkColors, lightColors } from '@/src/ui/theme/tokens';
 
 const TRENDING_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-config/refs/heads/main/trending.json';
 const TRENDING_TRACKS_CACHE_KEY = 'TRENDING_TRACKS_CACHE_V1';
@@ -33,6 +37,7 @@ export default function HomeScreen() {
   const { t, i18n } = useTranslation();
   const { mode, setMode } = useThemeMode();
   const isDark = colorScheme !== 'light';
+  const c = isDark ? darkColors : lightColors;
   const theme = useMemo(
     () => ({
       background: isDark ? '#050505' : '#f5efe6',
@@ -41,9 +46,9 @@ export default function HomeScreen() {
       textPrimary: isDark ? '#ffffff' : '#2d2219',
       textSecondary: isDark ? '#a9a9a9' : '#7a6251',
       border: isDark ? '#272727' : '#e4d5c5',
-      accent: isDark ? '#1DB954' : '#167c3a',
+      accent: c.neonPrimary,
     }),
-    [isDark]
+    [isDark, c.neonPrimary]
   );
 
   const [currentView, setCurrentView] = React.useState<'home' | 'search'>('home');
@@ -53,9 +58,9 @@ export default function HomeScreen() {
   const [trendingTracks, setTrendingTracks] = useState<Track[]>([]);
   const { getLikedSongsAsTrack } = useLikedSongs();
   const likedTracks = getLikedSongsAsTrack();
-  const [detectedCountry, setDetectedCountry] = useState('your country');
+  const [detectedCountry, setDetectedCountry] = useState('global');
   const [regionOverride, setRegionOverride] = useState<string>('auto');
-  const [countryLoading, setCountryLoading] = useState(true);
+  const [countryLoading, setCountryLoading] = useState(false);
   const [trendingData, setTrendingData] = useState<TrendingDataType | null>(null);
   const [trendingDataLoading, setTrendingDataLoading] = useState(true);
   const [trendingCache, setTrendingCache] = useState<Record<string, Track>>({});
@@ -66,9 +71,20 @@ export default function HomeScreen() {
   const [setupTheme, setSetupTheme] = useState<ThemeMode>(mode);
   const [isSavingSetup, setIsSavingSetup] = useState(false);
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
+  const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
+
   const { isOffline } = useConnectivity();
   const wasOfflineRef = React.useRef(false);
-  const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
+
+  const { data: youtubeTrending = [], isFetching: youtubeTrendingLoading } = useQuery({
+    queryKey: openQueryKeys.trending(),
+    queryFn: () => MusicAPI.getPopularTracks(),
+    staleTime: 5 * 60_000,
+    enabled: !isOffline && trendingEnabled,
+  });
+
+  const displayTrendingTracks =
+    trendingTracks.length > 0 ? trendingTracks : youtubeTrending;
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
     { label: 'English', value: 'en', nativeLabel: 'English' },
@@ -97,6 +113,8 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    // First run setup disabled for AURA migration
+    /*
     (async () => {
       try {
         const done = await AsyncStorage.getItem(FIRST_RUN_SETUP_KEY);
@@ -107,6 +125,7 @@ export default function HomeScreen() {
         setShowFirstRunSetup(true);
       }
     })();
+    */
   }, []);
 
   useEffect(() => {
@@ -158,14 +177,14 @@ export default function HomeScreen() {
           try {
             setCountryLoading(true);
             const res = await fetch('https://ipinfo.io/json');
-            const data = await res.json();
-            if (data && data.country && COUNTRY_NAMES[data.country]) {
-              setDetectedCountry(COUNTRY_NAMES[data.country]);
-            } else {
-              setDetectedCountry('your country');
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.country && COUNTRY_NAMES[data.country]) {
+                setDetectedCountry(COUNTRY_NAMES[data.country]);
+              }
             }
           } catch (e) {
-            console.error('Country re-fetch error:', e);
+            console.warn('[Home] Country detection failed, staying on Global:', e);
           } finally {
             setCountryLoading(false);
           }
@@ -304,7 +323,7 @@ export default function HomeScreen() {
         }
       }
     };
-    if (!countryLoading && !trendingDataLoading && trendingData && activeRegion && activeRegion !== 'your country') {
+    if (!countryLoading && !trendingDataLoading && trendingData && activeRegion) {
       if (activeRegion.toLowerCase() === 'global' && trendingData.global) {
         fetchTrendingTracks(trendingData.global);
         return () => { isMounted = false; };
@@ -390,10 +409,10 @@ export default function HomeScreen() {
         />
         <View style={styles.recentTrackInfo}>
           <Text style={[styles.recentTrackTitle, { color: theme.textPrimary }, isCurrentTrack && { color: theme.accent }]} numberOfLines={1}>
-            {item.title}
+            {MusicAPI.sanitizeTitle(item.title, item.artist)}
           </Text>
           <Text style={[styles.recentTrackArtist, { color: theme.textSecondary }, isCurrentTrack && { color: theme.accent }]} numberOfLines={1}>
-            {item.artist}
+            {MusicAPI.sanitizeArtist(item.artist)}
           </Text>
         </View>
         <TouchableOpacity
@@ -435,29 +454,31 @@ export default function HomeScreen() {
         {currentView === 'home' ? (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             <View style={[styles.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={[styles.heroEyebrow, { color: theme.accent }]}>{t('home.for_you')}</Text>
-              <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>{t('home.daily_mix_ready')}</Text>
-              <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
-                {t('home.daily_mix_subtitle')}
-              </Text>
+              <GlassCard neon="primary" padding={16} style={{ backgroundColor: 'transparent' }}>
+                <Text style={[styles.heroEyebrow, { color: theme.accent, letterSpacing: 2, textTransform: 'uppercase' }]}>Personalized</Text>
+                <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>Atmosphere Discovery</Text>
+                <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
+                  Your unique musical aura, refreshed and ready.
+                </Text>
+              </GlassCard>
             </View>
             {trendingEnabled && (
               <HorizontalTrackList
-                title={t('home.trending_in', { region: countryLoading ? '...' : (formattedActiveRegion || t('home.your_country')) })}
-                tracks={trendingTracks}
+                title={`${formattedActiveRegion || 'Local'} Pulse`}
+                tracks={displayTrendingTracks}
                 onTrackSelect={handleHomeTrackSelect}
                 isPlaying={isPlaying}
                 currentTrack={currentTrack}
               />
             )}
-            {trendingEnabled && trendingTracks.length === 0 && !trendingDataLoading && (
+            {trendingEnabled && displayTrendingTracks.length === 0 && !trendingDataLoading && !youtubeTrendingLoading && (
               <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 24 }}>
-                {t('home.loading_trending')}
+                Sensing the local pulse...
               </Text>
             )}
             {likedTracks.length > 0 ? (
               <HorizontalTrackList
-                title={t('home.liked_songs')}
+                title="Your Resonance"
                 tracks={likedTracks}
                 onTrackSelect={handleHomeTrackSelect}
                 isPlaying={isPlaying}
@@ -465,17 +486,17 @@ export default function HomeScreen() {
               />
             ) : (
               <View style={styles.emptyLikedSection}>
-                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('home.liked_songs')}</Text>
+                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Your Resonance</Text>
                 <View style={[styles.emptyLikedBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <Ionicons name="heart-outline" size={24} color={theme.textSecondary} />
                   <Text style={[styles.emptyLikedText, { color: theme.textSecondary }]}>
-                    {t('home.empty_liked')}
+                    Your resonance is empty. Start liking songs to build it.
                   </Text>
                 </View>
               </View>
             )}
             <View style={styles.recentSection}>
-              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('home.recently_played')}</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Recent Echoes</Text>
               {recentlyPlayedTracks.length === 0 ? (
                 <View style={[styles.emptyRecentBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <Ionicons name="time-outline" size={24} color={theme.textSecondary} />
@@ -495,86 +516,12 @@ export default function HomeScreen() {
           <></>
         )}
       </View>
+      {/* First run setup disabled for AURA migration */}
+      {/* 
       <Modal visible={showFirstRunSetup} transparent animationType="fade">
-        <View style={styles.setupOverlay}>
-          <View style={[styles.setupCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.setupTitle, { color: theme.textPrimary }]}>{t('home.welcome_title')}</Text>
-            <Text style={[styles.setupSubtitle, { color: theme.textSecondary }]}>
-              {t('home.welcome_subtitle')}
-            </Text>
-
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.region')}</Text>
-            <View style={styles.setupWrap}>
-              {['auto', ...Object.keys(trendingData || {})].slice(0, 12).map((option) => {
-                const active = setupRegion === option;
-                const label =
-                  option === 'auto'
-                    ? t('settings.auto')
-                    : option
-                        .split(' ')
-                        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-                        .join(' ');
-                return (
-                  <TouchableOpacity
-                    key={`setup-region-${option}`}
-                    style={[
-                      styles.setupChip,
-                      { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
-                      active && { backgroundColor: theme.accent, borderColor: theme.accent },
-                    ]}
-                    onPress={() => setSetupRegion(option)}
-                  >
-                    <Text style={[styles.setupChipText, { color: active ? '#fff' : theme.textSecondary }]}>{label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.language')}</Text>
-            <TouchableOpacity
-              style={[styles.setupDropdownButton, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
-              onPress={() => setIsLanguageModalOpen(true)}
-            >
-              <Text style={[styles.setupDropdownButtonText, { color: theme.textPrimary }]}>
-                {languageOptions.find((option) => option.value === setupLanguage)?.label || 'English'}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
-            </TouchableOpacity>
-
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.theme')}</Text>
-            <View style={styles.setupRow}>
-              {[
-                { label: t('components.theme_light'), value: 'light' as ThemeMode },
-                { label: t('components.theme_dark'), value: 'dark' as ThemeMode },
-                { label: t('components.theme_auto'), value: 'auto' as ThemeMode },
-              ].map((themeOption) => {
-                const active = setupTheme === themeOption.value;
-                return (
-                  <TouchableOpacity
-                    key={`setup-theme-${themeOption.value}`}
-                    style={[
-                      styles.setupSegment,
-                      { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
-                      active && { backgroundColor: theme.accent, borderColor: theme.accent },
-                    ]}
-                    onPress={() => setSetupTheme(themeOption.value)}
-                  >
-                    <Text style={[styles.setupSegmentText, { color: active ? '#fff' : theme.textSecondary }]}>{themeOption.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.setupContinueButton, { backgroundColor: theme.accent }]}
-              onPress={saveFirstRunSetup}
-              disabled={isSavingSetup}
-            >
-              {isSavingSetup ? <ActivityIndicator color="#fff" /> : <Text style={styles.setupContinueText}>{t('home.continue')}</Text>}
-            </TouchableOpacity>
-          </View>
-        </View>
+        ...
       </Modal>
+      */}
 
       <Modal
         visible={isLanguageModalOpen}
@@ -753,26 +700,26 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 14,
+    marginTop: 4,
+    marginBottom: 12,
     borderRadius: 18,
-    padding: 16,
+    padding: 12, // Slimmer
     borderWidth: 1,
   },
   heroEyebrow: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.7,
-    marginBottom: 6,
+    letterSpacing: 2,
+    marginBottom: 4,
   },
   heroTitle: {
-    fontSize: 26,
+    fontSize: 22, // Smaller title
     fontWeight: '800',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   heroSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   sectionTitle: {
     fontSize: 24,
@@ -809,12 +756,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   recentTrackTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 3,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   recentTrackArtist: {
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
   actionButton: {
     padding: 10,

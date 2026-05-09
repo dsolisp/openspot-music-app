@@ -6,6 +6,7 @@ import { Track } from '@/types/music';
 import { MusicAPI } from '@/lib/music-api';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
+import { darkColors, lightColors, radii, space, type } from '@/src/ui/theme/tokens';
 
 
 interface HorizontalTrackListProps {
@@ -20,7 +21,8 @@ interface HorizontalTrackListProps {
 export function HorizontalTrackList({ title, tracks, onTrackSelect, onAddToQueue, isPlaying, currentTrack }: HorizontalTrackListProps) {
   const scheme = useColorScheme();
   const isDark = scheme !== 'light';
-  const accent = isDark ? '#1DB954' : '#167c3a';
+  const c = isDark ? darkColors : lightColors;
+  const accent = c.neonPrimary;
   const { t } = useTranslation();
   const renderTrackItem = ({ item, index }: { item: Track; index: number }) => {
     const isCurrentTrack = currentTrack?.id === item.id;
@@ -60,15 +62,13 @@ export function HorizontalTrackList({ title, tracks, onTrackSelect, onAddToQueue
                 { color: isDark ? '#fff' : '#2d2219' },
                 isCurrentTrack && [styles.currentTrackText, { color: accent }],
               ]}
-              numberOfLines={2}
+              numberOfLines={1}
             >
-              {item.title}
+              {MusicAPI.sanitizeTitle(item.title, item.artist)}
             </Text>
-            {!isCurrentTrack && (
-              <Text style={[styles.trackArtist, { color: isDark ? '#888' : '#7a6251' }]} numberOfLines={1}>
-                {item.artist}
-              </Text>
-            )}
+            <Text style={[styles.trackArtist, { color: isDark ? '#a9a9a9' : '#7a6251' }]} numberOfLines={1}>
+              {MusicAPI.sanitizeArtist(item.artist)}
+            </Text>
             {onAddToQueue && (
               <TouchableOpacity
                 style={[styles.queueButton, { borderColor: isDark ? '#2d2d2d' : '#d8c8b8' }]}
@@ -87,7 +87,7 @@ export function HorizontalTrackList({ title, tracks, onTrackSelect, onAddToQueue
 
   return (
     <View style={styles.sectionContainer}>
-      <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#2d2219' }]}>{title}</Text>
+      <Text style={[styles.sectionTitle, { color: c.onSurface }]}>{title}</Text>
       <FlatList
         data={tracks}
         renderItem={renderTrackItem}
@@ -100,34 +100,32 @@ export function HorizontalTrackList({ title, tracks, onTrackSelect, onAddToQueue
   );
 }
 
-const CARD_WIDTH = 138;
-const CARD_HEIGHT = 194;
-const ALBUM_SIZE = 120;
+const CARD_WIDTH = 128;
+const CARD_HEIGHT = 172;
+const ALBUM_SIZE = 110;
 
 const styles = StyleSheet.create({
   sectionContainer: {
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   sectionTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginLeft: 16,
-    marginTop: 16,
-    marginBottom: 8,
+    ...type.titleMedium,
+    marginLeft: space.md,
+    marginTop: space.lg,
+    marginBottom: space.sm,
   },
   horizontalList: {
-    paddingLeft: 12,
-    paddingBottom: 8,
+    paddingLeft: space.sm,
+    paddingBottom: space.sm,
   },
   cardWrapper: {
-    marginRight: 16,
+    marginRight: space.md,
   },
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderWidth: 1,
-    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,
@@ -138,7 +136,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   currentTrackCard: {
-    borderColor: '#1DB954',
     borderWidth: 2,
   },
   albumArtWrapper: {
@@ -160,7 +157,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     right: 8,
-    backgroundColor: '#1DB954',
     borderRadius: 20,
     width: 40,
     height: 40,
@@ -178,23 +174,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginTop: 2,
     paddingBottom: 10,
-    minHeight: 56,
+    minHeight: 48,
     justifyContent: 'flex-start',
   },
   trackTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 3,
+    fontWeight: '700',
+    marginBottom: 4,
     lineHeight: 18,
+    letterSpacing: -0.2,
   },
   trackArtist: {
     fontSize: 12,
-    color: '#888',
+    fontWeight: '500',
     lineHeight: 16,
+    letterSpacing: 0.3,
   },
   currentTrackText: {
-    color: '#1DB954',
+    /* color set at callsite */
   },
   queueButton: {
     marginTop: 6,
@@ -208,7 +205,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   queueButtonText: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...type.label,
   },
 }); 

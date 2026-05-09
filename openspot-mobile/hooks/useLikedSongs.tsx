@@ -1,24 +1,15 @@
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Track } from '../types/music';
+import {
+  getAllLikesOrderedNewestFirst,
+  upsertLike,
+  removeLikeByTrackId,
+  clearAllLikes,
+  trackToLikedSong,
+  type LikedSong,
+} from '@/src/storage/likesRepo';
 
-const LIKED_SONGS_STORAGE_KEY = 'openspot_liked_songs';
-
-interface LikedSong {
-  id: string | number;
-  provider?: 'saavn' | 'ytmusic';
-  title: string;
-  artist: string;
-  albumTitle?: string;
-  duration?: number;
-  images: {
-    small: string;
-    thumbnail: string;
-    large: string;
-    back: string | null;
-  };
-  likedAt: string; 
-}
+export type { LikedSong };
 
 interface LikedSongsContextType {
   likedSongs: LikedSong[];
@@ -43,103 +34,74 @@ export function LikedSongsProvider({ children }: LikedSongsProviderProps) {
   const [likedSongs, setLikedSongs] = useState<LikedSong[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  
   useEffect(() => {
     const loadLikedSongs = async () => {
       try {
-        const savedLikedSongs = await AsyncStorage.getItem(LIKED_SONGS_STORAGE_KEY);
-        if (savedLikedSongs) {
-          const parsed = JSON.parse(savedLikedSongs) as LikedSong[];
-          setLikedSongs(parsed);
-        }
+        const rows = await getAllLikesOrderedNewestFirst();
+        setLikedSongs(rows);
       } catch (error) {
-        console.error('Failed to load liked songs from AsyncStorage:', error);
+        console.error('Failed to load liked songs from SQLite:', error);
         setLikedSongs([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadLikedSongs();
+    void loadLikedSongs();
   }, []);
 
-  
-  const saveLikedSongs = useCallback(async (songs: LikedSong[]) => {
-    try {
-      await AsyncStorage.setItem(LIKED_SONGS_STORAGE_KEY, JSON.stringify(songs));
-    } catch (error) {
-      console.error('Failed to save liked songs to AsyncStorage:', error);
-    }
-  }, []);
+  const isLiked = useCallback(
+    (trackId: string | number): boolean => {
+      const id = trackId.toString();
+      return likedSongs.some((song) => song.id.toString() === id);
+    },
+    [likedSongs]
+  );
 
-  
-  const isLiked = useCallback((trackId: string | number): boolean => {
-    return likedSongs.some(song => song.id === trackId);
-  }, [likedSongs]);
+  const likeSong = useCallback(
+    (track: Track) => {
+      if (isLiked(track.id)) return;
 
-  
-  const likeSong = useCallback((track: Track) => {
-    if (isLiked(track.id)) {
-      return;
-    }
+      const likedSong = trackToLikedSong(track);
+      setLikedSongs((prev) => [likedSong, ...prev.filter((s) => s.id.toString() !== likedSong.id.toString())]);
+      void upsertLike(likedSong).catch((e) => console.error('Failed to persist like', e));
+    },
+    [isLiked]
+  );
 
-    const likedSong: LikedSong = {
-      id: track.id,
-      provider: track.provider,
-      title: track.title,
-      artist: track.artist,
-      albumTitle: track.albumTitle,
-      duration: track.duration,
-      images: track.images,
-      likedAt: new Date().toISOString()
-    };
-
-    const updatedLikedSongs = [likedSong, ...likedSongs]; 
-    setLikedSongs(updatedLikedSongs);
-    saveLikedSongs(updatedLikedSongs);
-  }, [likedSongs, isLiked, saveLikedSongs]);
-
-  
   const unlikeSong = useCallback((trackId: string | number) => {
-    const songToUnlike = likedSongs.find(song => song.id === trackId);
-    if (!songToUnlike) {
-      return;
-    }
+    const id = trackId.toString();
+    setLikedSongs((prev) => prev.filter((song) => song.id.toString() !== id));
+    void removeLikeByTrackId(trackId).catch((e) => console.error('Failed to remove like', e));
+  }, []);
 
-    const updatedLikedSongs = likedSongs.filter(song => song.id !== trackId);
-    setLikedSongs(updatedLikedSongs);
-    saveLikedSongs(updatedLikedSongs);
-  }, [likedSongs, saveLikedSongs]);
+  const toggleLike = useCallback(
+    (track: Track) => {
+      if (isLiked(track.id)) {
+        unlikeSong(track.id);
+      } else {
+        likeSong(track);
+      }
+    },
+    [isLiked, likeSong, unlikeSong]
+  );
 
-  
-  const toggleLike = useCallback((track: Track) => {
-    if (isLiked(track.id)) {
-      unlikeSong(track.id);
-    } else {
-      likeSong(track);
-    }
-  }, [isLiked, likeSong, unlikeSong]);
-
-  
   const likedCount = likedSongs.length;
 
-  
   const recentlyLiked = likedSongs.slice(0, 10);
 
-  
   const clearAllLiked = useCallback(() => {
     setLikedSongs([]);
-    saveLikedSongs([]);
-  }, [saveLikedSongs]);
+    void clearAllLikes().catch((e) => console.error('Failed to clear likes', e));
+  }, []);
 
-  
   const getLikedSongsAsTrack = useCallback((): Track[] => {
-    return likedSongs.map(song => ({
+    return likedSongs.map((song) => ({
       id: song.id,
-      provider: song.provider,
+      provider: 'ytmusic',
       title: song.title,
       artist: song.artist,
-      artistId: 0, 
+      artistId: 0,
       albumTitle: song.albumTitle || '',
       albumCover: song.images.large,
       albumId: '',
@@ -149,7 +111,7 @@ export function LikedSongsProvider({ children }: LikedSongsProviderProps) {
       audioQuality: {
         maximumBitDepth: 16,
         maximumSamplingRate: 44100,
-        isHiRes: false
+        isHiRes: false,
       },
       version: null,
       label: '',
@@ -167,7 +129,7 @@ export function LikedSongsProvider({ children }: LikedSongsProviderProps) {
       releaseDateDownload: '',
       maximumChannelCount: 2,
       images: song.images,
-      isrc: ''
+      isrc: '',
     }));
   }, [likedSongs]);
 
@@ -181,14 +143,10 @@ export function LikedSongsProvider({ children }: LikedSongsProviderProps) {
     likedCount,
     recentlyLiked,
     clearAllLiked,
-    getLikedSongsAsTrack
+    getLikedSongsAsTrack,
   };
 
-  return (
-    <LikedSongsContext.Provider value={contextValue}>
-      {children}
-    </LikedSongsContext.Provider>
-  );
+  return <LikedSongsContext.Provider value={contextValue}>{children}</LikedSongsContext.Provider>;
 }
 
 export function useLikedSongs(): LikedSongsContextType {
@@ -197,4 +155,4 @@ export function useLikedSongs(): LikedSongsContextType {
     throw new Error('useLikedSongs must be used within a LikedSongsProvider');
   }
   return context;
-} 
+}

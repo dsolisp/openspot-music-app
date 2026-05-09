@@ -54,7 +54,8 @@
     "speed": "מהירות",
     "lyrics": "מילים",
     "stream_error_title": "שגיאת ניגון",
-    "stream_error_message": "לא ניתן היה לטעון את השיר שנבחר. אנא נסה שיר אחר."
+    "stream_error_message": "לא ניתן היה לטעון את השיר שנבחר. אנא נסה שיר אחר.",
+    "remote_playback_disabled": "הנגן של YouTube אינו זמין כרגע. נסה שוב מאוחר יותר."
   },
   "components": {
     "queue": "תור",

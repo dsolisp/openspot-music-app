@@ -54,7 +54,8 @@
     "speed": "Hız",
     "lyrics": "Şarkı Sözü",
     "stream_error_title": "Oynatma Hatası",
-    "stream_error_message": "Seçilen şarkı yüklenemedi. Lütfen başka bir şarkı dene."
+    "stream_error_message": "Seçilen şarkı yüklenemedi. Lütfen başka bir şarkı dene.",
+    "remote_playback_disabled": "YouTube oynatma geçici olarak kullanılamıyor. Lütfen daha sonra tekrar dene."
   },
   "components": {
     "queue": "Sıra",

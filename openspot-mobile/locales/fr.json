@@ -54,7 +54,8 @@
     "speed": "Vitesse",
     "lyrics": "Paroles",
     "stream_error_title": "Erreur de lecture",
-    "stream_error_message": "Désolé, la chanson sélectionnée n'a pas pu être chargée. Essaye un autre morceau."
+    "stream_error_message": "Désolé, la chanson sélectionnée n'a pas pu être chargée. Essaye un autre morceau.",
+    "remote_playback_disabled": "La lecture YouTube est temporairement indisponible. Réessaie plus tard."
   },
   "components": {
     "queue": "File d'attente",

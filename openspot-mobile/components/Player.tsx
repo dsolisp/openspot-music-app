@@ -20,11 +20,15 @@ import * as Sharing from 'expo-sharing';
 
 import { Track } from '../types/music';
 import { MusicAPI } from '../lib/music-api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getDownloadByTrackId } from '@/src/storage/downloadsRepo';
 import { FullScreenPlayer } from './FullScreenPlayer';
 import { useLikedSongs } from '../hooks/useLikedSongs';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
+import { darkColors, glass, glow, lightColors, radii, space, type } from '@/src/ui/theme/tokens';
+import { BlurView } from 'expo-blur';
+import { ArtworkTile } from '@/src/ui/components';
+import { Logger } from '@/src/utils/logger';
 
 interface PlayerProps {
   track: Track | null;
@@ -35,6 +39,21 @@ interface PlayerProps {
   pendingAutoPlayRef?: React.MutableRefObject<boolean>;
   showToast?: (message: string, type: 'success' | 'error') => void;
 }
+
+const ProgressBarFill = React.memo(({ duration, position, color }: { duration: number, position: number, color: string }) => {
+  const width = duration > 0 ? `${(position / duration) * 100}%` : '0%';
+  return (
+    <View
+      style={[
+        styles.whiteProgressBarFill,
+        {
+          backgroundColor: color,
+          width,
+        },
+      ]}
+    />
+  );
+});
 
 export function Player({
   track,
@@ -54,6 +73,7 @@ export function Player({
   const lastTrackIdRef = useRef<string | number | null>(null);
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
+  const c = useMemo(() => (isDark ? darkColors : lightColors), [isDark]);
   const theme = useMemo(
     () => ({
       card: isDark ? '#181a1f' : '#fffaf2',
@@ -61,12 +81,12 @@ export function Player({
       textPrimary: isDark ? '#ffffff' : '#2d2219',
       textSecondary: isDark ? '#b9c0d6' : '#7a6251',
       icon: isDark ? '#ffffff' : '#2d2219',
-      accent: isDark ? '#1DB954' : '#167c3a',
+      accent: c.neonPrimary,
       progressBg: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(45,34,25,0.18)',
       progressFill: isDark ? '#ffffff' : '#2d2219',
       border: isDark ? '#2a2f3a' : '#e4d5c5',
     }),
-    [isDark]
+    [isDark, c.neonPrimary]
   );
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -92,6 +112,8 @@ export function Player({
   const queueBuildDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const isInternalChangeRef = useRef(false);
+  /** Only keep current + this many upcoming tracks resolved in TrackPlayer (JIT; reduces URL expiry). */
+  const PREFETCH_AHEAD = 1;
   const { position: tpPosition, duration: tpDuration } = useProgress(250);
 
   
@@ -107,7 +129,6 @@ export function Player({
             }
           }
           
-          await TrackPlayer.reset();
           await TrackPlayer.updateOptions({
             capabilities: [
               Capability.Play,
@@ -119,7 +140,6 @@ export function Player({
             ],
             compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
           });
-          await TrackPlayer.setVolume(volume);
           playerReadyRef.current = true;
           if (isMountedRef.current) {
             setPlayerReady(true);
@@ -135,23 +155,19 @@ export function Player({
     return () => {
       isMountedRef.current = false;
       currentTrackIdRef.current = null;
-      if (downloadTimeoutRef.current) {
-        clearTimeout(downloadTimeoutRef.current);
-      }
-      if (downloadAbortRef.current) {
-        downloadAbortRef.current.abort();
-      }
-      if (queueBuildAbortRef.current) {
-        queueBuildAbortRef.current.abort();
-      }
-      if (queueBuildDebounceRef.current) {
-        clearTimeout(queueBuildDebounceRef.current);
-      }
+      if (downloadTimeoutRef.current) clearTimeout(downloadTimeoutRef.current);
+      if (downloadAbortRef.current) downloadAbortRef.current.abort();
+      if (queueBuildAbortRef.current) queueBuildAbortRef.current.abort();
+      if (queueBuildDebounceRef.current) clearTimeout(queueBuildDebounceRef.current);
       stopRotation();
-      TrackPlayer.stop().catch(() => {});
-      TrackPlayer.reset().catch(() => {});
     };
-  }, [volume]);
+  }, [stopRotation]);
+
+  useEffect(() => {
+    if (playerReady) {
+      TrackPlayer.setVolume(isMuted ? 0 : volume).catch(() => {});
+    }
+  }, [volume, isMuted, playerReady]);
 
   
   useEffect(() => {
@@ -208,25 +224,57 @@ export function Player({
   }, [isPlaying, startRotation]);
 
   
-  const resolveTrackUrl = async (t: Track): Promise<string> => {
+  const resolveTrackUrl = useCallback(async (t: Track): Promise<string> => {
     try {
-      const offlineData = await AsyncStorage.getItem(`offline_${t.id}`);
-      if (offlineData) {
-        const { fileUri } = JSON.parse(offlineData);
-        if (fileUri) {
-          const info = await FileSystem.getInfoAsync(fileUri);
-          if (info.exists) return fileUri;
-        }
+      const row = await getDownloadByTrackId(t.id);
+      if (row?.file_uri) {
+        const info = await FileSystem.getInfoAsync(row.file_uri);
+        if (info.exists) return row.file_uri;
       }
     } catch {}
     return MusicAPI.getStreamUrl(t.id.toString(), t);
-  };
+  }, []);
 
   
   const musicQueueRef = useRef(musicQueue);
   useEffect(() => {
     musicQueueRef.current = musicQueue;
   }, [musicQueue]);
+
+  const topUpTrackPlayerPrefetch = useCallback(async () => {
+    try {
+      if (!playerReadyRef.current) return;
+      const mq = musicQueueRef.current;
+      if (!mq?.tracks?.length || mq.currentIndex < 0) return;
+      const idx = mq.currentIndex as number;
+      const tracks = mq.tracks as Track[];
+      const tpQueue = await TrackPlayer.getQueue();
+      const ids = new Set(tpQueue.map((x) => (x?.id != null ? String(x.id) : '')).filter(Boolean));
+      for (let k = 1; k <= PREFETCH_AHEAD; k++) {
+        const j = idx + k;
+        if (j >= tracks.length) break;
+        const t = tracks[j];
+        const idStr = t.id.toString();
+        if (ids.has(idStr)) continue;
+        try {
+          const url = await resolveTrackUrl(t);
+          await TrackPlayer.add({
+            id: idStr,
+            url,
+            title: t.title,
+            artist: t.artist,
+            artwork: MusicAPI.getOptimalImage(t.images),
+            duration: t.duration ? Math.floor(t.duration / 1000) : undefined,
+          });
+          ids.add(idStr);
+        } catch {
+          /* noop */
+        }
+      }
+    } catch (e) {
+      console.warn('[Player] topUp prefetch failed', e);
+    }
+  }, [resolveTrackUrl]);
 
   const handleNext = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -265,19 +313,38 @@ export function Player({
 
   
   useEffect(() => {
+    let bufferingTimeout: ReturnType<typeof setTimeout> | null = null;
     const sub = TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
-      
       if (isInternalChangeRef.current) return;
 
-      
       if (event.state === State.Playing) {
         if (!isPlaying) onPlayingChange(true);
+        if (bufferingTimeout) {
+          clearTimeout(bufferingTimeout);
+          bufferingTimeout = null;
+        }
       } else if (event.state === State.Paused) {
         if (isPlaying) onPlayingChange(false);
+        if (bufferingTimeout) {
+          clearTimeout(bufferingTimeout);
+          bufferingTimeout = null;
+        }
+      } else if (event.state === State.Buffering || event.state === State.Loading) {
+        if (!bufferingTimeout) {
+          bufferingTimeout = setTimeout(() => {
+            console.warn('[Player] Watchdog: Stuck in buffering. Forcing next...');
+            handleNext();
+            if (showToast) showToast(t('player.stream_timeout'), 'error');
+            bufferingTimeout = null;
+          }, 10000);
+        }
       }
     });
-    return () => sub.remove();
-  }, [isPlaying, onPlayingChange]);
+    return () => {
+      sub.remove();
+      if (bufferingTimeout) clearTimeout(bufferingTimeout);
+    };
+  }, [isPlaying, onPlayingChange, handleNext, showToast, t]);
   
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event) => {
@@ -291,9 +358,10 @@ export function Player({
           musicQueueRef.current.setCurrentIndex(queueIndex);
         }
       }
+      void topUpTrackPlayerPrefetch();
     });
     return () => sub.remove();
-  }, []);
+  }, [topUpTrackPlayerPrefetch]);
 
   
   const syncTrackPlayerQueue = useCallback(async () => {
@@ -387,6 +455,13 @@ export function Player({
             }
             return;
           }
+
+          // ABORT CHECK: If the user changed the track while we were waiting for the URL to resolve
+          if (Math.abs(queueBuildGenRef.current) !== myGen) {
+            console.log('[Player] Track changed while resolving URL. Aborting stale playback.');
+            return;
+          }
+
           const currentItem = {
             id: current.id.toString(),
             url: currentUrl,
@@ -397,6 +472,7 @@ export function Player({
           };
           await TrackPlayer.reset();
           await TrackPlayer.add([currentItem]);
+          Logger.log(`TrackPlayer added: ${current.title} (${current.id})`, 'info', 'Player');
           if (shouldPlayNow) await TrackPlayer.play();
           else await TrackPlayer.pause();
         }
@@ -415,8 +491,9 @@ export function Player({
         const signal = queueBuildAbortRef.current?.signal;
         if (!signal) return;
         try {
-          for (let i = startIndex + 1; i < queueTracks.length; i++) {
-            if (signal.aborted) break;
+          for (let k = 1; k <= PREFETCH_AHEAD && !signal.aborted; k++) {
+            const i = startIndex + k;
+            if (i >= queueTracks.length) break;
             const t = queueTracks[i];
             try {
               const url = await resolveTrackUrl(t);
@@ -432,26 +509,6 @@ export function Player({
               ]);
             } catch {}
           }
-          for (let i = startIndex - 1; i >= 0; i--) {
-            if (signal.aborted) break;
-            const t = queueTracks[i];
-            try {
-              const url = await resolveTrackUrl(t);
-              await TrackPlayer.add(
-                [
-                  {
-                    id: t.id.toString(),
-                    url,
-                    title: t.title,
-                    artist: t.artist,
-                    artwork: MusicAPI.getOptimalImage(t.images),
-                    duration: t.duration ? Math.floor(t.duration / 1000) : undefined,
-                  },
-                ],
-                0
-              );
-            } catch (e) {console.error(e)}
-          }
         } catch (error) {
           console.error('[Player] Queue build error (gen:', myGen, '):', error);
         } finally {
@@ -464,7 +521,7 @@ export function Player({
         }
       })();
     }, 50);
-  }, [playerReady, musicQueue?.tracks, musicQueue?.currentIndex, track, isPlaying, onPlayingChange, pendingAutoPlayRef, t]);
+  }, [playerReady, musicQueue?.tracks, musicQueue?.currentIndex, track, isPlaying, onPlayingChange, pendingAutoPlayRef, t, resolveTrackUrl, showToast]);
 
   
   useEffect(() => {
@@ -517,7 +574,30 @@ export function Player({
     setIsMuted(newMutedState);
     await TrackPlayer.setVolume(newMutedState ? 0 : volume).catch(() => {});
   };
-  const handleShuffle = () => musicQueue.toggleShuffle();
+  const handleShuffle = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const { isShuffled, toggleShuffle, setQueueTracks } = useQueueStore.getState();
+    
+    if (isShuffled) {
+      // Toggle off
+      toggleShuffle();
+    } else if (track) {
+      // SMART SHUFFLE: Generate a context-aware queue
+      if (showToast) showToast(t('player.generating_smart_mix'), 'success');
+      try {
+        const smartTracks = await MusicAPI.getSmartScopeQueue(track);
+        if (smartTracks.length > 0) {
+          // Put current track first, then the smart ones
+          setQueueTracks([track, ...smartTracks.filter(t => t.id !== track.id)], 0);
+          // Toggle the shuffled state for UI
+          useQueueStore.setState({ isShuffled: true });
+        }
+      } catch (error) {
+        console.error('Smart Shuffle failed:', error);
+        toggleShuffle(); // Fallback to basic shuffle
+      }
+    }
+  };
 
   
   const handleShare = async () => {
@@ -638,51 +718,57 @@ export function Player({
   return (
     <>
       <View style={styles.cardroot}>
-        <View style={[styles.cardContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <TouchableOpacity
-            style={styles.cardTouchable}
-            activeOpacity={0.85}
-            onPress={() => setIsFullScreenOpen(true)}
-          >
-            <Image
-              source={{ uri: MusicAPI.getOptimalImage(track.images) }}
-              style={styles.cardAlbumArt}
-              contentFit="cover"
-            />
-            <View style={styles.cardInfoArea}>
-              <Text style={[styles.cardTitle, { color: theme.textPrimary }]} numberOfLines={1}>
-                {track.title}
-              </Text>
-              <Text style={[styles.cardArtist, { color: theme.textSecondary }]} numberOfLines={1}>
-                {track.artist}
-              </Text>
+        <BlurView
+          tint={isDark ? 'dark' : 'light'}
+          intensity={85} // Even stronger for premium feel
+          style={[
+            styles.cardContainer,
+            {
+              backgroundColor: c.surfaceGlassStrong,
+              borderColor: c.outline,
+              borderWidth: 1.5,
+              borderRadius: radii.lg,
+              overflow: 'hidden', // Master clip here
+            },
+          ]}
+        >
+          <View style={styles.cardMainRow}>
+            <TouchableOpacity
+              style={styles.cardTouchable}
+              activeOpacity={0.85}
+              onPress={() => setIsFullScreenOpen(true)}
+            >
+              <ArtworkTile uri={MusicAPI.getOptimalImage(track.images)} size={52} style={styles.cardAlbumArt} />
+              <View style={styles.cardInfoArea}>
+                <Text style={[styles.cardTitle, { color: c.onSurface }]} numberOfLines={1}>
+                  {MusicAPI.sanitizeTitle(track.title, track.artist)}
+                </Text>
+                <Text style={[styles.cardArtist, { color: c.onSurfaceMuted }]} numberOfLines={1}>
+                  {MusicAPI.sanitizeArtist(track.artist)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.cardActionsRow}>
+              <TouchableOpacity style={styles.cardIconButton} onPress={() => toggleLike(track)} activeOpacity={0.7}>
+                <Ionicons
+                  name={isLiked(track.id) ? 'heart' : 'heart-outline'}
+                  size={24}
+                  color={isLiked(track.id) ? c.neonSecondary : c.onSurface}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cardIconButton} onPress={onQueueToggle} activeOpacity={0.7}>
+                <Ionicons name="list" size={24} color={c.onSurface} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cardIconButton} onPress={handlePlayPause} activeOpacity={0.7}>
+                <Ionicons name={isPlaying ? 'pause' : 'play'} size={28} color={c.onSurface} />
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cardIconButton} onPress={() => toggleLike(track)} activeOpacity={0.7}>
-            <Ionicons
-              name={isLiked(track.id) ? 'heart' : 'heart-outline'}
-              size={24}
-              color={isLiked(track.id) ? theme.accent : theme.icon}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cardIconButton} onPress={onQueueToggle} activeOpacity={0.7}>
-            <Ionicons name="list" size={24} color={theme.icon} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cardIconButton} onPress={handlePlayPause} activeOpacity={0.7}>
-            <Ionicons name={isPlaying ? 'pause' : 'play'} size={28} color={theme.icon} />
-          </TouchableOpacity>
-        </View>
-        <View style={[styles.whiteProgressBarBg, { backgroundColor: theme.progressBg }]}>
-          <View
-            style={[
-              styles.whiteProgressBarFill,
-              {
-                backgroundColor: theme.progressFill,
-                width: duration > 0 ? `${(position / duration) * 100}%` : '0%',
-              },
-            ]}
-          />
-        </View>
+          </View>
+
+          <View style={[styles.whiteProgressBarBg, { backgroundColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(45,34,25,0.14)' }]}>
+            <ProgressBarFill duration={duration} position={position} color={c.neonPrimary} />
+          </View>
+        </BlurView>
       </View>
 
       {/* Download Modal */}
@@ -691,7 +777,7 @@ export function Player({
           <View style={styles.downloadModal}>
             <LinearGradient colors={['#1a1a1a', '#2a2a2a']} style={styles.modalGradient}>
               <View style={styles.modalHeader}>
-                <Ionicons name="download" size={24} color="#1DB954" />
+                <Ionicons name="download" size={24} color={c.neonPrimary} />
                 <Text style={styles.modalTitle}>{shareMode ? t('player.share') : t('components.download')}</Text>
                 <TouchableOpacity style={styles.closeButton} onPress={handleCloseDownloadModal}>
                   <Ionicons name="close" size={20} color="#888" />
@@ -719,12 +805,12 @@ export function Player({
                   )}
                   {downloadStatus === 'downloading' && (
                     <>
-                      <ActivityIndicator size="large" color="#1DB954" style={styles.spinner} />
+                      <ActivityIndicator size="large" color={c.neonPrimary} style={styles.spinner} />
                       <Text style={styles.statusText}>{t('components.downloading')}</Text>
                       <Text style={styles.statusText}>{t('components.download_hint')}</Text>
                       <View style={styles.downloadProgressContainer}>
                         <View style={styles.downloadProgressBar}>
-                          <View style={[styles.progressFillBar, { width: `${downloadProgress}%` }]} />
+                          <View style={[styles.progressFillBar, { width: `${downloadProgress}%`, backgroundColor: c.neonPrimary }]} />
                         </View>
                         <Text style={styles.progressText}>{downloadProgress}%</Text>
                       </View>
@@ -732,7 +818,7 @@ export function Player({
                   )}
                   {downloadStatus === 'success' && (
                     <>
-                      <Ionicons name="checkmark-circle" size={48} color="#1DB954" style={styles.successIcon} />
+                      <Ionicons name="checkmark-circle" size={48} color={c.neonPrimary} style={styles.successIcon} />
                       <Text style={styles.successText}>{t('components.download_complete')}</Text>
                     </>
                   )}
@@ -742,7 +828,7 @@ export function Player({
                       <Text style={styles.errorText}>{t('components.download_failed')}</Text>
                       <Text style={styles.errorSubtext}>{downloadError}</Text>
                       <TouchableOpacity
-                        style={styles.retryButton}
+                        style={[styles.retryButton, { backgroundColor: c.neonPrimary }]}
                         onPress={() => {
                           handleCloseDownloadModal();
                           setTimeout(() => handleShare(), 300);
@@ -775,7 +861,6 @@ export function Player({
         onNext={handleNext}
         onPrevious={handlePrevious}
         onShuffle={handleShuffle}
-        onShare={handleShare}
         musicQueue={musicQueue}
         onQueueToggle={onQueueToggle}
       />
@@ -787,19 +872,18 @@ export function Player({
 const styles = StyleSheet.create({
   cardContainer: {
     width: '100%',
-    backgroundColor: '#1a2341',
-    borderRadius: 16,
-    borderWidth: 1,
+  },
+  cardMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingTop: space.sm,
+    paddingBottom: 2,
+    paddingHorizontal: space.md,
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   cardTouchable: {
     flexDirection: 'row',
@@ -807,35 +891,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardAlbumArt: {
-    width: 54,
-    height: 54,
-    borderRadius: 8,
-    marginRight: 14,
-    backgroundColor: '#222',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#222',
+    marginRight: space.md,
   },
   cardInfoArea: {
     flex: 1,
     justifyContent: 'center',
   },
   cardTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 2,
+    ...type.bodyMedium,
+    fontSize: 16,
   },
   cardArtist: {
-    color: '#bfc8e6',
-    fontSize: 15,
-    fontWeight: '400',
-    marginBottom: 2,
+    ...type.label,
+    fontSize: 12,
   },
   cardIconButton: {
-    marginLeft: 12,
-    padding: 8,
-    borderRadius: 16,
+    marginLeft: space.xs,
+    padding: space.sm,
+    borderRadius: radii.pill,
   },
   modalOverlay: {
     flex: 1,
@@ -891,22 +964,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   trackTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...type.titleMedium,
     marginBottom: 2,
   },
   trackArtist: {
-    fontSize: 14,
-    color: '#888',
+    ...type.label,
   },
   statusContainer: {
     alignItems: 'center',
     marginTop: 10,
   },
   statusText: {
-    fontSize: 16,
-    color: '#888',
+    ...type.body,
     marginBottom: 10,
   },
   spinner: {
@@ -925,7 +994,7 @@ const styles = StyleSheet.create({
   },
   progressFillBar: {
     height: '100%',
-    backgroundColor: '#1DB954',
+    backgroundColor: '#fff',
     borderRadius: 4,
   },
   progressText: {
@@ -936,9 +1005,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   successText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1DB954',
+    ...type.title,
     marginBottom: 5,
   },
   successSubtext: {
@@ -950,8 +1017,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   errorText: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    ...type.title,
     color: '#ff4444',
     marginBottom: 5,
   },
@@ -962,15 +1028,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   retryButton: {
-    backgroundColor: '#1DB954',
+    backgroundColor: '#fff',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
   },
   retryButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...type.bodyMedium,
     textAlign: 'center',
   },
   visualProgressBarContainer: {
@@ -996,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   visualProgressBarFill: {
     height: 10,
-    backgroundColor: '#1DB954',
+    backgroundColor: '#fff',
     borderRadius: 0,
     margin: 0,
     padding: 0,
@@ -1009,26 +1074,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   songTitleText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...type.titleMedium,
     textAlign: 'center',
     width: '100%',
     letterSpacing: 0.2,
   },
   whiteProgressBarBg: {
-    marginHorizontal: 8,
-    height: 4,
+    marginHorizontal: 16,
+    height: 3,
     backgroundColor: '#fff',
     opacity: 0.18,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    borderRadius: 1.5,
     overflow: 'hidden',
-    marginTop: -4,
-    marginBottom: 0,
+    marginTop: 4,
+    marginBottom: 10, // More breathing room
   },
   whiteProgressBarFill: {
-    height: 4,
+    height: 3,
     backgroundColor: '#fff',
     opacity: 1,
     borderBottomLeftRadius: 0,
@@ -1037,7 +1099,11 @@ const styles = StyleSheet.create({
   cardroot: {
     width: '100%',
     backgroundColor: 'transparent',
-    borderRadius: 16,
+    borderRadius: radii.lg,
+    overflow: 'hidden', // Master clip
     flexDirection: 'column',
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    marginBottom: space.xs,
   },
 });

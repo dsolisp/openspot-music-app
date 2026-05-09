@@ -65,19 +65,7 @@
 
 ### 🖥️ **Desktop**
 
-🍎 **macOS (Apple Silicon)**
-👉 [**Download Now**](https://github.com/BlackHatDevX/openspot-music-app/releases/download/v3.1.4/OpenSpot-3.1.4-release.dmg)
-
-```bash
-# Run the below command after moving app to applications
-xattr -rd com.apple.quarantine /Applications/OpenSpot.app
-```
-
-🪟 **Windows**
-👉 [**Download Now**](https://github.com/BlackHatDevX/openspot-music-app/releases/download/v3.1.4/OpenSpot-3.1.4-release.exe)
-
-🐧 **Linux (Debian/Ubuntu)**
-👉 [**Download Now**](https://github.com/BlackHatDevX/openspot-music-app/releases/download/v3.1.4/OpenSpot-3.1.4-release.deb)
+Desktop builds have been removed from this repository; development focuses on **`openspot-mobile/`** (Android / Expo).
 
 <br>
 
@@ -126,30 +114,23 @@ xattr -rd com.apple.quarantine /Applications/OpenSpot.app
 
 ## 📖 Overview
 
-This monorepo delivers **two fully independent music streaming apps** built with cutting‑edge technologies:
+This repository contains the **OpenSpot** Android app (**React Native + Expo**), with a **YouTube-only** streaming stack (automatic Invidious → Piped → optional yt-dlp cascade), **SQLite**-backed playlist metadata (with one-time migration from legacy `AsyncStorage`), and room to grow the **2026 UI token** layer under `openspot-mobile/src/ui/`.
 
 | App | Platforms | Framework | Location |
 |-----|-----------|-----------|----------|
-| 📱 **Mobile** | Android, iOS *(coming)* | React Native + Expo | `openspot-mobile/` |
-| 🖥️ **Desktop** | macOS, Windows/Linux *(coming)* | Tauri + React | `openspot-desktop/` |
+| 📱 **Mobile** | Android (primary), iOS via Expo | React Native + Expo | `openspot-mobile/` |
 
-Both apps share the same powerful streaming core, giving you a seamless listening experience across all your devices.
+See `openspot-mobile/src/youtube/API_INVENTORY.md` for provider endpoint notes.
 
 ---
 
 ## 🧰 Tech Stack
 
 ### 📱 Mobile
-`React Native` · `Expo Router` · `Expo AV` · `EAS Build` · `IPinfo API`
+`React Native` · `Expo Router` · `react-native-track-player` · `expo-sqlite` · `TanStack Query` · `IPinfo API` (trending)
 
-### 🖥️ Desktop
-`Tauri` · `React` · `Material‑UI` · `React Context + useReducer` 
-
-### 📊 Code Composition
-![TypeScript](https://img.shields.io/badge/TypeScript-95.7%25-3178C6?style=flat-square&logo=typescript)  
-![JavaScript](https://img.shields.io/badge/JavaScript-2.6%25-F7DF1E?style=flat-square&logo=javascript)  
-![CSS](https://img.shields.io/badge/CSS-1.2%25-1572B6?style=flat-square&logo=css3)  
-![HTML](https://img.shields.io/badge/HTML-0.5%25-E34F26?style=flat-square&logo=html5)
+### 📊 Code composition
+The app remains TypeScript-first; Saavn-era APIs may still exist for non-search flows that hit `MusicApi` until fully migrated.
 
 ---
 

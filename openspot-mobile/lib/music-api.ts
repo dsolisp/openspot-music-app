@@ -1,93 +1,55 @@
-import { SearchResponse, SearchParams, Track } from '../types/music';
-import { MusicApi } from './api';
-import { YTMusicAPI } from './ytmusic-api';
+import { YouTubeAdapter } from '@/src/youtube/YouTubeAdapter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sanitizeTitle, sanitizeArtist, parseArtistAndTitle } from '@/src/utils/metadata';
 
 const PROVIDER_KEY = 'openspot_provider_v1';
 
+/** YouTube-only: all browse + streams go through `YouTubeAdapter` (Invidious → Piped → youtube-sr). */
 export class MusicAPI {
-  private static searchCache = new Map<string, Promise<SearchResponse>>();
-  private static streamCache = new Map<string, Promise<string>>();
   private static recentlyPlayedStorageKey = 'openspot_recently_played_tracks_v1';
   private static recentlyPlayedLimit = 30;
 
-  private static async getProvider(): Promise<'saavn' | 'ytmusic'> {
+  static async ensureYouTubeProviderDefault(): Promise<void> {
     try {
-      const provider = await AsyncStorage.getItem(PROVIDER_KEY);
-      return (provider === 'ytmusic' ? 'ytmusic' : 'saavn') as 'saavn' | 'ytmusic';
+      const cur = await AsyncStorage.getItem(PROVIDER_KEY);
+      if (cur !== 'ytmusic') {
+        await AsyncStorage.setItem(PROVIDER_KEY, 'ytmusic');
+      }
     } catch {
-      return 'saavn';
+      /* noop */
     }
-  }
-
-  private static resolveProviderHint(trackOrProvider?: Track | 'saavn' | 'ytmusic'): 'saavn' | 'ytmusic' | null {
-    if (!trackOrProvider) return null;
-    if (trackOrProvider === 'saavn' || trackOrProvider === 'ytmusic') {
-      return trackOrProvider;
-    }
-    return trackOrProvider.provider || null;
   }
 
   static async search(params: SearchParams): Promise<SearchResponse> {
-    const provider = await this.getProvider();
-    
-    if (provider === 'ytmusic' && (!params.type || params.type === 'track')) {
-      return YTMusicAPI.search({ q: params.q, type: params.type });
-    }
-    return MusicApi.search(params);
+    return YouTubeAdapter.instance.search(params);
   }
 
-  static async searchTracks(query: string, offset: number = 0, limit: number = 20): Promise<SearchResponse> {
-    const provider = await this.getProvider();
-    if (provider === 'ytmusic') {
-      return YTMusicAPI.search({ q: query, type: 'track' });
-    }
-    return MusicApi.searchTracks(query, offset, limit);
+  static async searchTracks(query: string, _offset: number = 0, _limit: number = 20): Promise<SearchResponse> {
+    return YouTubeAdapter.instance.search({ q: query, type: 'track' });
   }
 
-  static async getStreamUrl(trackId: string, trackOrProvider?: Track | 'saavn' | 'ytmusic'): Promise<string> {
-    const hintedProvider = this.resolveProviderHint(trackOrProvider);
-    const provider = hintedProvider || 'saavn';
-    if (provider === 'ytmusic') {
-      return YTMusicAPI.getStreamUrl(trackId);
-    }
-    return MusicApi.getStreamUrl(trackId);
+  static async getStreamUrl(trackId: string, _trackOrProvider?: Track | 'ytmusic'): Promise<string> {
+    return YouTubeAdapter.instance.getAudioStreamUrl(trackId);
   }
 
-  static async getDownloadUrl(trackId: string, trackOrProvider?: Track | 'saavn' | 'ytmusic'): Promise<string> {
-    const hintedProvider = this.resolveProviderHint(trackOrProvider);
-    const provider = hintedProvider || 'saavn';
-    if (provider === 'ytmusic') {
-      return YTMusicAPI.getDownloadUrl(trackId);
-    }
-    
-    return MusicApi.getStreamUrl(trackId);
+  static async getDownloadUrl(trackId: string, trackOrProvider?: Track | 'ytmusic'): Promise<string> {
+    return MusicAPI.getStreamUrl(trackId, trackOrProvider);
   }
 
-  static async getPopularTracks(): Promise<Track[]> {
-    
-    return MusicApi.getPopularTracks();
+  static async getPopularTracks(region?: string): Promise<Track[]> {
+    return YouTubeAdapter.instance.getPopularTracks(region);
   }
 
   static async getAlbumSongs(albumId: string): Promise<Track[]> {
-    const provider = await this.getProvider();
-    
-    if (provider === 'ytmusic') return MusicApi.getAlbumSongs(albumId);
-    return MusicApi.getAlbumSongs(albumId);
+    return YouTubeAdapter.instance.getAlbumSongs(albumId);
   }
 
   static async getArtistSongs(artistId: string, page: number = 0): Promise<{ tracks: Track[]; total: number }> {
-    const provider = await this.getProvider();
-    
-    if (provider === 'ytmusic') return MusicApi.getArtistSongs(artistId, page);
-    return MusicApi.getArtistSongs(artistId, page);
+    return YouTubeAdapter.instance.getArtistSongs(artistId, page);
   }
 
   static async getPlaylistSongs(playlistId: string): Promise<Track[]> {
-    const provider = await this.getProvider();
-    
-    if (provider === 'ytmusic') return MusicApi.getPlaylistSongs(playlistId);
-    return MusicApi.getPlaylistSongs(playlistId);
+    return YouTubeAdapter.instance.getPlaylistSongs(playlistId);
   }
 
   static async getRecentlyPlayed(): Promise<Track[]> {
@@ -122,29 +84,36 @@ export class MusicAPI {
   }
 
   static async getMadeForYou(): Promise<Track[]> {
-    
-    return MusicApi.getMadeForYou();
+    return YouTubeAdapter.instance.getMadeForYou();
   }
 
-  static async resolveTrackById(trackId: string, preferredProvider?: 'saavn' | 'ytmusic'): Promise<Track | null> {
-    const providers: ('saavn' | 'ytmusic')[] = preferredProvider
-      ? [preferredProvider, preferredProvider === 'saavn' ? 'ytmusic' : 'saavn']
-      : ['saavn', 'ytmusic'];
+  static async getSmartScopeQueue(seed: Track): Promise<Track[]> {
+    return YouTubeAdapter.instance.getSmartScopeQueue(seed);
+  }
 
-    for (const provider of providers) {
-      try {
-        const response = provider === 'saavn'
-          ? await MusicApi.search({ q: trackId, type: 'track' })
-          : await YTMusicAPI.search({ q: trackId, type: 'track' });
-        if (response.tracks.length > 0) {
-          return response.tracks[0];
-        }
-      } catch {
-        
+  static async resolveTrackById(trackId: string, _preferredProvider?: 'ytmusic'): Promise<Track | null> {
+    try {
+      const response = await YouTubeAdapter.instance.search({ q: trackId, type: 'track' });
+      if (response.tracks.length > 0) {
+        const exact = response.tracks.find((t) => t.id.toString() === trackId);
+        return exact ?? response.tracks[0];
       }
+    } catch {
+      /* noop */
     }
-
     return null;
+  }
+
+  static parseArtistAndTitle(rawTitle: string, rawArtist: string): { title: string; artist: string } {
+    return parseArtistAndTitle(rawTitle, rawArtist);
+  }
+
+  static sanitizeTitle(title: string, artistName?: string): string {
+    return sanitizeTitle(title, artistName);
+  }
+
+  static sanitizeArtist(artist: string): string {
+    return sanitizeArtist(artist);
   }
 
   static formatDuration(duration: number): string {
@@ -174,15 +143,14 @@ export class MusicAPI {
   }
 
   static clearCache(): void {
-    this.searchCache.clear();
-    this.streamCache.clear();
+    /* legacy no-op: stream URLs are resolved JIT via YouTubeAdapter */
   }
 
   static clearSearchCache(): void {
-    this.searchCache.clear();
+    /* no-op */
   }
 
   static clearStreamCache(): void {
-    this.streamCache.clear();
+    /* no-op */
   }
-} 
+}

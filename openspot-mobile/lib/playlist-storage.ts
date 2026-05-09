@@ -1,6 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Track } from '@/types/music';
 import { MusicAPI } from '@/lib/music-api';
+import {
+  replaceAllPlaylistsInSqlite,
+  upsertTrackMeta,
+  getTrackMetaFromSqlite,
+} from '@/src/storage/playlistsSqlite';
 
 export interface Playlist {
   name: string;
@@ -18,6 +23,7 @@ export const PlaylistStorage = {
   },
   async savePlaylists(playlists: Playlist[]) {
     await AsyncStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
+    void replaceAllPlaylistsInSqlite(playlists).catch((e) => console.warn('[PlaylistStorage] sqlite sync', e));
   },
   async addPlaylist(playlist: Playlist) {
     const playlists = await this.getPlaylists();
@@ -53,12 +59,15 @@ export const PlaylistStorage = {
       const trackId = track.id.toString();
       const key = `${TRACK_DATA_KEY}_${trackId}`;
       await AsyncStorage.setItem(key, JSON.stringify(track));
+      void upsertTrackMeta(track).catch((e) => console.warn('[PlaylistStorage] track sqlite', e));
     } catch (error) {
       console.error('Failed to save track data:', error);
     }
   },
   async getTrackData(trackId: string): Promise<Track | null> {
     try {
+      const fromSql = await getTrackMetaFromSqlite(trackId);
+      if (fromSql) return fromSql;
       const key = `${TRACK_DATA_KEY}_${trackId}`;
       const data = await AsyncStorage.getItem(key);
       return data ? JSON.parse(data) : null;

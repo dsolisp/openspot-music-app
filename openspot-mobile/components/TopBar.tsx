@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Linking,
   StyleSheet,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -13,6 +14,9 @@ import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemeMode, useThemeMode } from '@/hooks/theme-mode';
 import { useTranslation } from 'react-i18next';
+import { BlurView } from 'expo-blur';
+import { Chip } from '@/src/ui/components';
+import { darkColors, glass, lightColors, radii, space, type } from '@/src/ui/theme/tokens';
 
 interface UseSearchReturn {
   query: string;
@@ -52,7 +56,8 @@ export function TopBar({
 }: TopBarProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
-  const accent = isDark ? '#1DB954' : '#167c3a';
+  const c = isDark ? darkColors : lightColors;
+  const accent = c.neonPrimary;
   const { mode, setMode } = useThemeMode();
   const { t } = useTranslation();
   const { query, setQuery, searchTracks, clearResults, searchType, setSearchType } = searchState;
@@ -102,15 +107,12 @@ export function TopBar({
   const modeOptions: ThemeMode[] = ['light', 'dark', 'auto'];
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: isDark ? '#000' : '#f5efe6',
-          borderBottomColor: isDark ? '#333' : '#e4d5c5',
-        },
-      ]}
-    >
+    <View style={styles.container}>
+      <BlurView
+        tint={isDark ? 'dark' : 'light'}
+        intensity={glass.blur}
+        style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(5,6,10,0.70)' : 'rgba(255,255,255,0.55)' }]}
+      />
       <View style={styles.content}>
         {currentView === 'search' && (
           <TouchableOpacity
@@ -124,11 +126,19 @@ export function TopBar({
         <View style={styles.centerContent}>
           {currentView === 'home' ? (
             <TouchableOpacity onPress={handleTitlePress} activeOpacity={0.8}>
-              <Text style={[styles.title, styles.homeTitle, { color: accent }]}>{t('components.openspot')}</Text>
+              <Text style={[styles.title, styles.homeTitle, { color: accent }]}>A U R A</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.searchViewContainer}>
-              <View style={[styles.searchContainer, { backgroundColor: isDark ? '#1a1a1a' : '#fffaf2' }]}>
+              <View
+                style={[
+                  styles.searchContainer,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.72)',
+                    borderColor: `rgba(255,255,255,0.16)`,
+                  },
+                ]}
+              >
                 <TextInput
                   style={[styles.searchInput, { fontSize: placeholderFontSize, color: isDark ? '#fff' : '#2d2219' }]}
                   placeholder={t('components.search_placeholder')}
@@ -161,56 +171,17 @@ export function TopBar({
                   />
                 </TouchableOpacity>
               </View>
-              <View style={[styles.searchTypeToggle, { backgroundColor: isDark ? '#1a1a1a' : '#fffaf2' }]}>
-                <TouchableOpacity
-                  style={[styles.toggleButton, searchType === 'track' && [styles.toggleButtonActive, { backgroundColor: accent }]]}
-                  onPress={() => handleSearchTypeToggle('track')}
-                >
-                  <Text
-                    style={[styles.toggleButtonText, { color: isDark ? '#888' : '#8a6e5a' }, searchType === 'track' && styles.toggleButtonTextActive]}
-                    allowFontScaling={false}
-                    numberOfLines={1}
-                  >
-                    {t('components.songs_tab')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toggleButton, searchType === 'album' && [styles.toggleButtonActive, { backgroundColor: accent }]]}
-                  onPress={() => handleSearchTypeToggle('album')}
-                >
-                  <Text
-                    style={[styles.toggleButtonText, { color: isDark ? '#888' : '#8a6e5a' }, searchType === 'album' && styles.toggleButtonTextActive]}
-                    allowFontScaling={false}
-                    numberOfLines={1}
-                  >
-                    {t('components.albums_tab')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toggleButton, searchType === 'artist' && [styles.toggleButtonActive, { backgroundColor: accent }]]}
-                  onPress={() => handleSearchTypeToggle('artist')}
-                >
-                  <Text
-                    style={[styles.toggleButtonText, { color: isDark ? '#888' : '#8a6e5a' }, searchType === 'artist' && styles.toggleButtonTextActive]}
-                    allowFontScaling={false}
-                    numberOfLines={1}
-                  >
-                    {t('components.artists_tab')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toggleButton, searchType === 'playlist' && [styles.toggleButtonActive, { backgroundColor: accent }]]}
-                  onPress={() => handleSearchTypeToggle('playlist')}
-                >
-                  <Text
-                    style={[styles.toggleButtonText, { color: isDark ? '#888' : '#8a6e5a' }, searchType === 'playlist' && styles.toggleButtonTextActive]}
-                    allowFontScaling={false}
-                    numberOfLines={1}
-                  >
-                    {t('components.playlists_tab')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                style={styles.searchTypeScroll}
+                contentContainerStyle={styles.searchTypeToggle}
+              >
+                <Chip label={t('components.songs_tab')} selected={searchType === 'track'} onPress={() => handleSearchTypeToggle('track')} />
+                <Chip label={t('components.albums_tab')} selected={searchType === 'album'} onPress={() => handleSearchTypeToggle('album')} />
+                <Chip label={t('components.artists_tab')} selected={searchType === 'artist'} onPress={() => handleSearchTypeToggle('artist')} />
+                <Chip label={t('components.playlists_tab')} selected={searchType === 'playlist'} onPress={() => handleSearchTypeToggle('playlist')} />
+              </ScrollView>
             </View>
           )}
         </View>
@@ -256,16 +227,15 @@ export function TopBar({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    paddingBottom: space.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.10)',
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   backButton: {
     marginRight: 16,
@@ -276,24 +246,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1DB954',
+    ...type.title,
     textAlign: 'center',
+    letterSpacing: 6, // Aura atmosphere
+    textTransform: 'uppercase',
   },
   homeTitle: {
     textAlign: 'left',
     marginLeft: 8,
   },
   searchViewContainer: {
-    gap: 8,
+    gap: space.sm,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 25,
-    paddingHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.lg,
+    paddingHorizontal: space.md,
     height: 40,
   },
   searchInput: {
@@ -341,30 +311,15 @@ const styles = StyleSheet.create({
   modeButtonTextActive: {
     color: '#fff',
   },
+  searchTypeScroll: {
+    marginTop: -4, // Pull closer to search bar
+    marginHorizontal: -space.md, // Bleed to edges
+    paddingHorizontal: space.md,
+  },
   searchTypeToggle: {
     flexDirection: 'row',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 20,
-    padding: 4,
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 0,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#1DB954',
-  },
-  toggleButtonText: {
-    color: '#888',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  toggleButtonTextActive: {
-    color: '#fff',
+    gap: 8,
+    paddingVertical: 8,
+    paddingRight: 32, // Space for scrolling end
   },
 });

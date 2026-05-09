@@ -17,11 +17,12 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
+import { Logger, LogEntry } from '@/src/utils/logger';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemeMode, useThemeMode } from '@/hooks/theme-mode';
-import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
+import { darkColors, lightColors } from '@/src/ui/theme/tokens';
 const CURRENT_VERSION = '3.1.4';
 const LINKEDIN_URL = 'https://www.linkedin.com/in/jash-gro/';
 const TELEGRAM_URL = 'https://telegram.dog/deveIoper_x';
@@ -33,7 +34,6 @@ const UPDATE_CONFIG_URL = 'https://raw.githubusercontent.com/BlackHatDevX/opensp
 const TRENDING_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-config/refs/heads/main/trending.json';
 const REGION_OVERRIDE_KEY = 'openspot_region_override_v1';
 const LANGUAGE_KEY = 'openspot_language_v1';
-const PROVIDER_KEY = 'openspot_provider_v1';
 const TRENDING_ENABLED_KEY = 'openspot_trending_enabled_v1';
 const ROTATING_COVER_KEY = 'openspot_rotating_cover_v1';
 
@@ -61,17 +61,15 @@ export default function SettingsScreen() {
   const [region, setRegion] = useState<string>('auto');
   const [regionOptions, setRegionOptions] = useState<string[]>(['auto']);
   const [language, setLanguage] = useState<string>('en');
-  const [provider, setProvider] = useState<string>('saavn');
   const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
   const [rotatingCover, setRotatingCover] = useState<boolean>(true);
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const [updateConfig, setUpdateConfig] = useState<UpdateConfig | null>(null);
   const [showForceUpdate, setShowForceUpdate] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [showBetaWarning, setShowBetaWarning] = useState(false);
-  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
-  const { isProviderDisabled } = useApiStatus();
-  const { toastMessage, toastType, showToast } = useToast();
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const { toastMessage, toastType } = useToast();
 
   const currentVersion = Constants.expoConfig?.version ?? CURRENT_VERSION;
 
@@ -107,7 +105,7 @@ export default function SettingsScreen() {
       textPrimary: isDark ? '#ffffff' : '#2d2219',
       textSecondary: isDark ? '#a9a9a9' : '#7a6251',
       border: isDark ? '#272727' : '#e4d5c5',
-      accent: isDark ? '#1DB954' : '#167c3a',
+      accent: (isDark ? darkColors : lightColors).neonPrimary,
     }),
     [isDark]
   );
@@ -128,11 +126,6 @@ export default function SettingsScreen() {
     { label: 'Russian', value: 'ru', nativeLabel: 'Russkiy' },
     { label: 'Hebrew', value: 'he', nativeLabel: 'Ivrit' },
     { label: 'Turkish', value: 'tr', nativeLabel: 'Türkçe' },
-  ];
-
-  const providerOptions: { label: string; value: string }[] = [
-    { label: 'Saavn', value: 'saavn' },
-    { label: 'YouTube (Beta)', value: 'ytmusic' },
   ];
 
   const loadRegionOptions = async () => {
@@ -196,17 +189,6 @@ export default function SettingsScreen() {
       }
     };
 
-    const loadProvider = async () => {
-      try {
-        const storedProvider = await AsyncStorage.getItem(PROVIDER_KEY);
-        if (storedProvider && storedProvider.trim()) {
-          setProvider(storedProvider);
-        }
-      } catch (error) {
-        console.error('Failed to load provider setting:', error);
-      }
-    };
-
     const loadTrendingEnabled = async () => {
       try {
         const stored = await AsyncStorage.getItem(TRENDING_ENABLED_KEY);
@@ -231,11 +213,10 @@ export default function SettingsScreen() {
 
     void loadRegion();
     void loadLanguage();
-    void loadProvider();
     void loadTrendingEnabled();
     void loadRotatingCover();
     void loadRegionOptions();
-    void checkForUpdates();
+    // void checkForUpdates(); // Disabled for AURA migration
   }, [i18n, checkForUpdates]);
 
   const handleRegionChange = async (nextRegion: string) => {
@@ -257,44 +238,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleProviderChange = async (nextProvider: string) => {
-    if (isProviderDisabled(nextProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
-      return;
-    }
-    
-    if (nextProvider === 'ytmusic' && provider !== 'ytmusic') {
-      setPendingProvider(nextProvider);
-      setShowBetaWarning(true);
-      return;
-    }
-    
-    setProvider(nextProvider);
-    try {
-      await AsyncStorage.setItem(PROVIDER_KEY, nextProvider);
-    } catch (error) {
-      console.error('Failed to save provider setting:', error);
-    }
-  };
-
-  const handleBetaWarningProceed = async () => {
-    if (pendingProvider) {
-      setProvider(pendingProvider);
-      try {
-        await AsyncStorage.setItem(PROVIDER_KEY, pendingProvider);
-      } catch (error) {
-        console.error('Failed to save provider setting:', error);
-      }
-    }
-    setShowBetaWarning(false);
-    setPendingProvider(null);
-  };
-
-  const handleBetaWarningBack = () => {
-    setShowBetaWarning(false);
-    setPendingProvider(null);
-  };
-
   const handleTrendingToggle = async (enabled: boolean) => {
     setTrendingEnabled(enabled);
     try {
@@ -311,6 +254,17 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error('Failed to save rotating cover setting:', error);
     }
+  };
+
+  const handleOpenLogs = async () => {
+    const data = await Logger.getLogs();
+    setLogs(data);
+    setShowLogs(true);
+  };
+
+  const handleClearLogs = async () => {
+    await Logger.clearLogs();
+    setLogs([]);
   };
 
   return (
@@ -416,34 +370,11 @@ export default function SettingsScreen() {
         </View>
 
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>{t('settings.music_provider')}</Text>
-          <Text style={[styles.cardText, { color: theme.textSecondary }]}>
-            {t('settings.provider_description')}
-          </Text>
-          <View style={styles.segmentRow}>
-            {providerOptions.map((option) => {
-              const active = provider === option.value;
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.segmentButton,
-                    { backgroundColor: theme.surfaceElevated, borderColor: theme.border },
-                    active && { backgroundColor: theme.accent, borderColor: theme.accent },
-                  ]}
-                  onPress={() => handleProviderChange(option.value)}
-                >
-                  <Text style={[styles.segmentText, { color: active ? '#fff' : theme.textSecondary }]}>{option.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>{t('settings.trending')}</Text>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>
+                {t('settings.trending')}
+              </Text>
               <Text style={[styles.cardText, { color: theme.textSecondary }]}>{t('settings.trending_description')}</Text>
             </View>
             <TouchableOpacity
@@ -502,6 +433,19 @@ export default function SettingsScreen() {
               );
             })}
           </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Debug Logs</Text>
+          <Text style={[styles.cardText, { color: theme.textSecondary, marginBottom: 12 }]}>
+            View internal logs to troubleshoot playback or server issues.
+          </Text>
+          <TouchableOpacity 
+            style={[styles.primaryButton, { backgroundColor: theme.accent }]}
+            onPress={handleOpenLogs}
+          >
+            <Text style={styles.primaryButtonText}>View Logs</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -660,41 +604,41 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Beta Warning Modal */}
-      <Modal visible={showBetaWarning} transparent animationType="fade">
+      {/* Logs Modal */}
+      <Modal visible={showLogs} transparent animationType="slide" onRequestClose={() => setShowLogs(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.betaWarningCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Ionicons name="warning" size={48} color={theme.accent} style={{ alignSelf: 'center', marginBottom: 12 }} />
-            <Text style={[styles.cardTitle, { color: theme.textPrimary, textAlign: 'center', fontSize: 18 }]}>
-              {t('settings.beta_warning_title')}
-            </Text>
-            <Text style={[styles.cardText, { color: theme.textSecondary, textAlign: 'center', marginBottom: 16 }]}>
-              {t('settings.beta_warning_description')}
-            </Text>
-            <TouchableOpacity style={styles.betaLinkRow} onPress={() => Linking.openURL('https://t.me/openspot_music/15')}>
-              <Text style={[styles.betaLinkText, { color: theme.accent }]}>{t('settings.beta_warning_link')}</Text>
-              <Ionicons name="arrow-forward" size={16} color={theme.accent} />
-            </TouchableOpacity>
-            <View style={styles.betaButtonRow}>
-              <TouchableOpacity
-                style={[styles.secondaryButton, { borderColor: theme.border, flex: 1, marginRight: 8 }]}
-                onPress={handleBetaWarningBack}
-              >
-                <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>{t('settings.back')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primaryButton, { backgroundColor: theme.accent, flex: 1 }]}
-                onPress={handleBetaWarningProceed}
-              >
-                <Text style={styles.primaryButtonText}>{t('settings.proceed')}</Text>
+          <View style={[styles.logsModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Internal Logs</Text>
+              <TouchableOpacity onPress={handleClearLogs}>
+                <Text style={{ color: '#ff4444', fontWeight: '600' }}>Clear</Text>
               </TouchableOpacity>
             </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 12 }}>
+              {logs.length === 0 ? (
+                <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>No logs recorded yet.</Text>
+              ) : (
+                logs.map((log, idx) => (
+                  <View key={idx} style={[styles.logItem, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.logTimestamp, { color: theme.textSecondary }]}>
+                      {log.timestamp.split('T')[1].split('.')[0]} [{log.level.toUpperCase()}]
+                    </Text>
+                    <Text style={[styles.logMessage, { color: theme.textPrimary }]}>
+                      {log.context ? `[${log.context}] ` : ''}{log.message}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity style={styles.cancelButtonRow} onPress={() => setShowLogs(false)}>
+              <Text style={{ color: theme.textPrimary, fontSize: 15, fontWeight: '700' }}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       {toastMessage && (
-        <View style={[styles.toastContainer, { backgroundColor: toastType === 'error' ? '#ff4444' : '#1DB954' }]}>
+        <View style={[styles.toastContainer, { backgroundColor: toastType === 'error' ? '#ff4444' : theme.accent }]}>
           <Ionicons name={toastType === 'error' ? 'alert-circle' : 'checkmark-circle'} size={20} color="#fff" style={styles.toastIcon} />
           <Text style={styles.toastText}>{toastMessage}</Text>
         </View>
@@ -1029,5 +973,30 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  logItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  logTimestamp: {
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: 2,
+  },
+  logMessage: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  logsModalCard: {
+    width: '95%',
+    height: '80%',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
   },
 });

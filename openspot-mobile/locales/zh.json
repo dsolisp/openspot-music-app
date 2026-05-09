@@ -54,7 +54,8 @@
     "speed": "播放速度",
     "lyrics": "歌词",
     "stream_error_title": "播放错误",
-    "stream_error_message": "抱歉，无法加载所选歌曲。请尝试其他歌曲。"
+    "stream_error_message": "抱歉，无法加载所选歌曲。请尝试其他歌曲。",
+    "remote_playback_disabled": "YouTube 播放暂时不可用，请稍后再试。"
   },
   "components": {
     "queue": "播放队列",

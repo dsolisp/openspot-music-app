@@ -54,7 +54,8 @@
     "speed": "Speed",
     "lyrics": "Lyrics",
     "stream_error_title": "Playback Error",
-    "stream_error_message": "Sorry, the selected song could not be loaded from the backend. Please try another song."
+    "stream_error_message": "Sorry, the selected song could not be loaded from the backend. Please try another song.",
+    "remote_playback_disabled": "YouTube playback is temporarily unavailable. Please try again later."
   },
   "components": {
     "queue": "Queue",

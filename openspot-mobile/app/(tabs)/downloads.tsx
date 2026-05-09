@@ -6,17 +6,19 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PlaylistStorage } from '@/lib/playlist-storage';
 import { Track } from '@/types/music';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { MusicAPI } from '@/lib/music-api';
-import { MusicPlayerContext } from './_layout';
+import { MusicPlayerContext } from '@/src/context/MusicPlayerContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import { useConnectivity } from '@/hooks/useConnectivity';
+import { getDownloadByTrackId, removeDownloadByTrackId } from '@/src/storage/downloadsRepo';
+import { radii, space, type } from '@/src/ui/theme/tokens';
+import { darkColors, lightColors } from '@/src/ui/theme/tokens';
 
 type SortKey = 'dateAdded' | 'title' | 'artist';
 
@@ -137,7 +139,7 @@ export default function DownloadsScreen() {
     border: isDark ? '#272727' : '#e4d5c5',
     textPrimary: isDark ? '#fff' : '#2d2219',
     textSecondary: isDark ? '#888' : '#7a6251',
-    accent: isDark ? '#1DB954' : '#167c3a',
+    accent: (isDark ? darkColors : lightColors).neonPrimary,
   }), [isDark]);
 
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -172,10 +174,16 @@ export default function DownloadsScreen() {
       const entries = await Promise.all(
         reversedIds.map(async (id) => {
           try {
-            const raw = await AsyncStorage.getItem(`offline_${id}`);
-            if (raw) {
-              const meta: OfflineTrackMeta = JSON.parse(raw);
-              if (meta.trackData) return { id, meta };
+            const row = await getDownloadByTrackId(id);
+            if (row?.track) {
+              return {
+                id,
+                meta: {
+                  trackData: row.track,
+                  fileUri: row.file_uri,
+                  thumbUri: row.thumb_uri ?? undefined,
+                } as OfflineTrackMeta,
+              };
             }
           } catch { /* ignore corrupt entries */ }
 
@@ -250,14 +258,15 @@ export default function DownloadsScreen() {
   const deleteTrack = useCallback(async (track: Track) => {
     try {
       await PlaylistStorage.removeTrackFromPlaylist(track.id.toString(), 'offline');
-      const raw = await AsyncStorage.getItem(`offline_${track.id}`);
-      if (raw) {
-        const { fileUri, thumbUri } = JSON.parse(raw);
-        if (fileUri) await FileSystem.deleteAsync(fileUri, { idempotent: true });
-        if (thumbUri) await FileSystem.deleteAsync(thumbUri, { idempotent: true });
-        await AsyncStorage.removeItem(`offline_${track.id}`);
+      const row = await getDownloadByTrackId(track.id);
+      if (row?.file_uri) {
+        await FileSystem.deleteAsync(row.file_uri, { idempotent: true });
       }
-      
+      if (row?.thumb_uri) {
+        await FileSystem.deleteAsync(row.thumb_uri, { idempotent: true });
+      }
+      await removeDownloadByTrackId(track.id);
+
       setTracks(prev => prev.filter(t => t.id !== track.id));
       setThumbMap(prev => {
         const next = { ...prev };
@@ -537,13 +546,13 @@ export default function DownloadsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { flex: 1, paddingTop: 20, paddingHorizontal: 12 },
+  content: { flex: 1, paddingTop: space.lg, paddingHorizontal: space.md },
   header: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: 12,
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold' },
-  trackCount: { fontSize: 16, fontWeight: '400' },
+  headerTitle: { ...type.title },
+  trackCount: { ...type.body },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerButton: { padding: 8, borderRadius: 20, borderWidth: 1 },
   searchBar: {
@@ -551,34 +560,34 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 12,
     paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10,
   },
-  searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
+  searchInput: { flex: 1, ...type.body, paddingVertical: 0 },
   sortMenu: { borderWidth: 1, borderRadius: 12, marginBottom: 10, overflow: 'hidden' },
   sortOption: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
   },
-  sortLabel: { fontSize: 15 },
+  sortLabel: { ...type.body },
   activeFilters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   filterChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
   },
-  filterChipText: { fontSize: 13 },
+  filterChipText: { ...type.label },
   trackRow: {
     flexDirection: 'row', alignItems: 'center',
     borderWidth: 1, borderRadius: 12, marginBottom: 10, padding: 10,
   },
   albumArtWrapper: { position: 'relative', marginRight: 14 },
-  albumArt: { width: 54, height: 54, borderRadius: 8, backgroundColor: '#222' },
+  albumArt: { width: 54, height: 54, borderRadius: radii.sm, backgroundColor: '#222' },
   artOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 8, alignItems: 'center', justifyContent: 'center',
   },
   info: { flex: 1, marginRight: 8 },
-  title: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
-  artist: { fontSize: 13 },
+  title: { ...type.bodyMedium, marginBottom: 2 },
+  artist: { ...type.label },
   iconButton: { padding: 6, borderRadius: 16 },
   emptyState: { alignItems: 'center', marginTop: 60, gap: 16 },
-  emptyText: { fontSize: 15, textAlign: 'center' },
+  emptyText: { ...type.body, textAlign: 'center' },
 });

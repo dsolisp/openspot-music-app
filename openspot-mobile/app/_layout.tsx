@@ -4,42 +4,21 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { QueryClientProvider } from '@tanstack/react-query';
 
 import { useThemeMode, ThemeModeProvider } from '@/hooks/theme-mode';
 import { LikedSongsProvider } from '@/hooks/useLikedSongs';
 import { useApiStatus } from '@/hooks/useApiStatus';
 import '@/lib/i18n';
+import { queryClient } from '@/src/state/queryClient';
+import { migrateLegacyAsyncStorageIfNeeded, migrateLibraryFromAsyncStorageIfNeeded, mirrorPlaylistsToAsyncStorage } from '@/src/storage/migrateFromAsyncStorage';
+import { MusicAPI } from '@/lib/music-api';
 
 SplashScreen.preventAutoHideAsync();
 
 function AppNavigation() {
   const { resolvedScheme } = useThemeMode();
-  const { apiStatus, loading } = useApiStatus();
-  const PROVIDER_KEY = 'openspot_provider_v1';
-
-  useEffect(() => {
-    const checkAndSwitchProvider = async () => {
-      if (loading || !apiStatus) return;
-
-      try {
-        const currentProvider = await AsyncStorage.getItem(PROVIDER_KEY);
-        if (!currentProvider) return;
-
-        if (currentProvider === 'ytmusic' && apiStatus.ytmusic?.disabled) {
-          await AsyncStorage.setItem(PROVIDER_KEY, 'saavn');
-          console.log('Auto-switched provider from ytmusic to saavn (ytmusic disabled)');
-        } else if (currentProvider === 'saavn' && apiStatus.saavn?.disabled) {
-          await AsyncStorage.setItem(PROVIDER_KEY, 'ytmusic');
-          console.log('Auto-switched provider from saavn to ytmusic (saavn disabled)');
-        }
-      } catch (error) {
-        console.error('Failed to check/switch provider:', error);
-      }
-    };
-
-    checkAndSwitchProvider();
-  }, [apiStatus, loading]);
+  useApiStatus();
 
   return (
     <LikedSongsProvider>
@@ -63,15 +42,30 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        await MusicAPI.ensureYouTubeProviderDefault();
+        await migrateLegacyAsyncStorageIfNeeded();
+        await migrateLibraryFromAsyncStorageIfNeeded();
+        await mirrorPlaylistsToAsyncStorage();
+      } catch (e) {
+        console.warn('[OpenSpot] storage bootstrap', e);
+      }
+    })();
+  }, []);
+
   if (!loaded) {
     return null;
   }
 
   return (
-    <SafeAreaProvider>
-      <ThemeModeProvider>
-        <AppNavigation />
-      </ThemeModeProvider>
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <ThemeModeProvider>
+          <AppNavigation />
+        </ThemeModeProvider>
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }

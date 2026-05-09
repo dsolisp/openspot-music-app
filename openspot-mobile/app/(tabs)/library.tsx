@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlaylistList } from '@/components/PlaylistList';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
-import { MusicPlayerContext } from './_layout';
+import { MusicPlayerContext } from '@/src/context/MusicPlayerContext';
 import { Ionicons } from '@expo/vector-icons';
 import { PlaylistStorage, Playlist } from '@/lib/playlist-storage';
 import { MusicAPI } from '@/lib/music-api';
@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
+import { darkColors, lightColors, radii, space, type } from '@/src/ui/theme/tokens';
 
 export default function LibraryScreen() {
   const { t } = useTranslation();
@@ -27,7 +28,7 @@ export default function LibraryScreen() {
     textPrimary: isDark ? '#fff' : '#2d2219',
     textSecondary: isDark ? '#888' : '#7a6251',
     border: isDark ? '#272727' : '#e4d5c5',
-    accent: isDark ? '#1DB954' : '#167c3a',
+    accent: (isDark ? darkColors : lightColors).neonPrimary,
   };
   const { handleTrackSelect } = useContext(MusicPlayerContext);
   const { getLikedSongsAsTrack, isLiked, toggleLike } = useLikedSongs();
@@ -383,16 +384,13 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
   scrollContent: {
-    padding: 16,
+    padding: space.md,
     paddingBottom: 60,
   },
   sectionTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: 'bold',
+    ...type.title,
     marginBottom: 18,
     marginLeft: 2,
   },
@@ -414,9 +412,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   createButtonText: {
-    color: '#1DB954',
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...type.bodyMedium,
   },
   createButtonIconOnly: {
     alignItems: 'center',
@@ -446,9 +442,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...type.titleMedium,
     marginBottom: 18,
   },
   input: {
@@ -456,11 +450,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     borderWidth: 1,
     borderColor: '#2b2b2b',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: radii.md,
+    padding: space.md,
     width: '100%',
     marginBottom: 12,
-    fontSize: 15,
+    ...type.body,
   },
   cancelButton: {
     marginTop: 10,
@@ -477,14 +471,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   trackRowTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
+    ...type.bodyMedium,
     marginBottom: 1,
   },
   trackRowArtist: {
-    color: '#888',
-    fontSize: 12,
+    ...type.label,
   },
   trackRowBox: {
     flexDirection: 'row',

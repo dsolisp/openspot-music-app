@@ -4,7 +4,6 @@ const API_STATUS_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-
 
 export interface ApiStatus {
   ytmusic: { disabled: boolean };
-  saavn: { disabled: boolean };
 }
 
 export function useApiStatus() {
@@ -15,11 +14,13 @@ export function useApiStatus() {
     const fetchApiStatus = async () => {
       try {
         const response = await fetch(API_STATUS_URL);
-        const data = await response.json();
-        setApiStatus(data);
+        const data = (await response.json()) as { ytmusic?: { disabled?: boolean } };
+        setApiStatus({
+          ytmusic: { disabled: Boolean(data?.ytmusic?.disabled) },
+        });
       } catch (error) {
         console.error('Failed to fetch API status:', error);
-        setApiStatus({ ytmusic: { disabled: false }, saavn: { disabled: false } });
+        setApiStatus({ ytmusic: { disabled: false } });
       } finally {
         setLoading(false);
       }
@@ -28,10 +29,10 @@ export function useApiStatus() {
     fetchApiStatus();
   }, []);
 
-  const isProviderDisabled = (provider: 'saavn' | 'ytmusic'): boolean => {
+  const isYouTubeDisabled = (): boolean => {
     if (!apiStatus) return false;
-    return apiStatus[provider]?.disabled || false;
+    return apiStatus.ytmusic.disabled;
   };
 
-  return { apiStatus, loading, isProviderDisabled };
+  return { apiStatus, loading, isYouTubeDisabled };
 }

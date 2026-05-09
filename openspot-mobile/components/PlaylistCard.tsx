@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { darkColors, lightColors, type } from '@/src/ui/theme/tokens';
 
 interface PlaylistCardProps {
   playlist: {
@@ -25,6 +27,9 @@ interface PlaylistCardProps {
 
 export function PlaylistCard({ playlist, onPress, onShuffle, onPlay, onLongPress, theme }: PlaylistCardProps) {
   const { t } = useTranslation();
+  const scheme = useColorScheme();
+  const isDark = scheme !== 'light';
+  const c = isDark ? darkColors : lightColors;
   return (
     <View style={[styles.card, theme && { backgroundColor: theme.surface, borderColor: theme.border }]}>
       <TouchableOpacity
@@ -45,7 +50,7 @@ export function PlaylistCard({ playlist, onPress, onShuffle, onPlay, onLongPress
           <Ionicons name="shuffle" size={20} color={theme?.icon ?? "#fff"} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} onPress={onPlay}>
-          <Ionicons name="play" size={20} color={theme?.accent ?? "#1DB954"} />
+          <Ionicons name="play" size={20} color={theme?.accent ?? c.neonPrimary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -87,14 +92,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...type.bodyMedium,
     marginBottom: 2,
   },
   count: {
-    color: '#888',
-    fontSize: 13,
+    ...type.label,
   },
   actionRow: {
     flexDirection: 'row',

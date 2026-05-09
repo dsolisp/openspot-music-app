@@ -2,10 +2,10 @@ import React from 'react';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  FlatList
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,8 @@ import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
+import { SearchResultsSkeleton } from '@/src/ui/components';
+import { darkColors, lightColors, type } from '@/src/ui/theme/tokens';
 
 interface UseSearchReturn {
   query: string;
@@ -51,6 +53,7 @@ export function SearchResults({
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
   const { t } = useTranslation();
+  const c = isDark ? darkColors : lightColors;
   const theme = {
     background: isDark ? '#050505' : '#f5efe6',
     surface: isDark ? '#121212' : '#fffaf2',
@@ -58,7 +61,7 @@ export function SearchResults({
     textPrimary: isDark ? '#fff' : '#2d2219',
     textSecondary: isDark ? '#888' : '#7a6251',
     border: isDark ? '#272727' : '#e4d5c5',
-    accent: isDark ? '#1DB954' : '#167c3a',
+    accent: c.neonPrimary,
   };
   const router = useRouter();
   const { results, albums, artists, playlists, isLoading, error, hasMore, loadMore, query, searchType } = searchState;
@@ -100,7 +103,7 @@ export function SearchResults({
             ]}
             numberOfLines={1}
           >
-            {item.title}
+            {MusicAPI.sanitizeTitle(item.title, item.artist)}
           </Text>
           <Text
             style={[
@@ -110,7 +113,7 @@ export function SearchResults({
             ]}
             numberOfLines={1}
           >
-            {item.artist}
+            {MusicAPI.sanitizeArtist(item.artist)}
           </Text>
           <Text style={[styles.trackDuration, { color: theme.textSecondary }]}>
             {MusicAPI.formatDuration(item.duration / 1000)}
@@ -266,7 +269,7 @@ export function SearchResults({
     
     return (
       <View style={styles.loadingFooter}>
-        <ActivityIndicator size="small" color="#1DB954" />
+        <ActivityIndicator size="small" color={theme.accent} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>{t('components.loading_more')}</Text>
       </View>
     );
@@ -280,9 +283,8 @@ export function SearchResults({
 
   if (isLoading && displayData.length === 0) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1DB954" />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>{t('components.searching')}</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <SearchResultsSkeleton rows={10} />
       </View>
     );
   }
@@ -337,6 +339,7 @@ export function SearchResults({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={searchType === 'track' ? styles.listContainer : styles.albumListContainer}
         numColumns={searchType === 'track' ? 1 : 2}
+        key={searchType === 'track' ? 'v-list' : 'h-grid'} // Force re-render when switching columns
       />
     </View>
   );
@@ -369,7 +372,7 @@ const styles = StyleSheet.create({
   albumCover: {
     width: 50,
     height: 50,
-    borderRadius: 4,
+    borderRadius: 10,
     marginRight: 12,
   },
   trackInfo: {
@@ -377,22 +380,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   trackTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 2,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   trackArtist: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.2,
     marginBottom: 2,
   },
   trackDuration: {
-    fontSize: 12,
-    color: '#666',
+    ...type.label,
   },
   currentTrackText: {
-    color: '#1DB954',
+    /* color set at callsite */
   },
   trackActions: {
     flexDirection: 'row',
@@ -418,8 +421,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   loadingText: {
-    color: '#888',
-    fontSize: 14,
+    ...type.label,
     marginLeft: 8,
   },
   errorContainer: {

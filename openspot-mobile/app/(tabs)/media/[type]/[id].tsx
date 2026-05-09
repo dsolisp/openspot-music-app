@@ -21,6 +21,7 @@ import { Track } from '@/types/music';
 import { MusicPlayerContext } from '../../_layout';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { darkColors, lightColors } from '@/src/ui/theme/tokens';
 
 type MediaType = 'album' | 'artist' | 'playlist';
 
@@ -37,7 +38,18 @@ interface TrackListItemProps {
   isLiked: boolean;
 }
 
-const TrackListItem = React.memo(({ item, index, isCurrentTrack, isPlaying, theme, tracks, onTrackSelect, onToggleLike, onAddToQueue, isLiked }: TrackListItemProps) => {
+const TrackListItem = React.memo(function TrackListItem({
+  item,
+  index,
+  isCurrentTrack,
+  isPlaying,
+  theme,
+  tracks,
+  onTrackSelect,
+  onToggleLike,
+  onAddToQueue,
+  isLiked,
+}: TrackListItemProps) {
   const handlePress = useCallback(() => {
     onTrackSelect(item, tracks, index);
   }, [item, tracks, index, onTrackSelect]);
@@ -130,6 +142,7 @@ export default function MediaDetailsScreen() {
   const { t } = useTranslation();
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
+  const c = isDark ? darkColors : lightColors;
   const theme = useMemo(
     () => ({
       base: isDark ? '#000000' : '#f5efe6',
@@ -137,12 +150,12 @@ export default function MediaDetailsScreen() {
       glassBorder: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
       textPrimary: isDark ? '#ffffff' : '#1a1a1a',
       textSecondary: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-      accent: isDark ? '#1DB954' : '#167c3a',
+      accent: c.neonPrimary,
       track: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
       icon: isDark ? '#ffffff' : '#1a1a1a',
       disabled: isDark ? '#444' : '#ccc',
     }),
-    [isDark]
+    [isDark, c.neonPrimary]
   );
 
   useEffect(() => {

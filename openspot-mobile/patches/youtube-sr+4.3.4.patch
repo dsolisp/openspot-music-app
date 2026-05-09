@@ -1,0 +1,44 @@
+diff --git a/node_modules/youtube-sr/dist/mod.js b/node_modules/youtube-sr/dist/mod.js
+index 5ce6bdf..158ef85 100644
+--- a/node_modules/youtube-sr/dist/mod.js
++++ b/node_modules/youtube-sr/dist/mod.js
+@@ -461,15 +461,8 @@ function getFetch() {
+       return window.fetch;
+     if ("fetch" in globalThis)
+       return globalThis.fetch;
+-    for (const fetchLib of FETCH_LIBS) {
+-      try {
+-        const pkg = yield import(fetchLib);
+-        const mod = pkg.fetch || pkg.default || pkg;
+-        if (mod)
+-          return __fetch = mod;
+-      } catch (e) {
+-      }
+-    }
++
++    // Fallbacks removed for React Native compatibility
+     if (isNode)
+       throw new Error(`Could not resolve fetch library. Install one of ${FETCH_LIBS.map((m) => `"${m}"`).join(", ")} or define "fetch" in global scope!`);
+     throw new Error("Could not resolve fetch in global scope");
+diff --git a/node_modules/youtube-sr/dist/mod.mjs b/node_modules/youtube-sr/dist/mod.mjs
+index 9590c51..3a57bfa 100644
+--- a/node_modules/youtube-sr/dist/mod.mjs
++++ b/node_modules/youtube-sr/dist/mod.mjs
+@@ -429,15 +429,8 @@ function getFetch() {
+       return window.fetch;
+     if ("fetch" in globalThis)
+       return globalThis.fetch;
+-    for (const fetchLib of FETCH_LIBS) {
+-      try {
+-        const pkg = yield import(fetchLib);
+-        const mod = pkg.fetch || pkg.default || pkg;
+-        if (mod)
+-          return __fetch = mod;
+-      } catch (e) {
+-      }
+-    }
++
++    // Fallbacks removed for React Native compatibility
+     if (isNode)
+       throw new Error(`Could not resolve fetch library. Install one of ${FETCH_LIBS.map((m) => `"${m}"`).join(", ")} or define "fetch" in global scope!`);
+     throw new Error("Could not resolve fetch in global scope");

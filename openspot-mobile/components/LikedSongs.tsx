@@ -8,12 +8,14 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
 import { Track } from '@/types/music';
 import { MusicAPI } from '@/lib/music-api';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { useTranslation } from 'react-i18next';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { darkColors, lightColors, radii, space, type } from '@/src/ui/theme/tokens';
+import { GlassCard, NeonButton } from '@/src/ui/components';
 
 interface LikedSongsProps {
   onTrackSelect: (track: Track, trackList?: Track[], startIndex?: number) => void;
@@ -29,6 +31,9 @@ export function LikedSongs({
 }: LikedSongsProps) {
   const { likedSongs, isLoading, toggleLike, getLikedSongsAsTrack } = useLikedSongs();
   const { t } = useTranslation();
+  const scheme = useColorScheme();
+  const isDark = scheme !== 'light';
+  const c = isDark ? darkColors : lightColors;
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const likedTracks = getLikedSongsAsTrack();
@@ -74,6 +79,7 @@ export function LikedSongs({
             style={[
               styles.trackTitle,
               isCurrentTrack && styles.currentTrackText,
+              { color: isCurrentTrack ? c.neonPrimary : c.onSurface },
             ]}
             numberOfLines={1}
           >
@@ -83,13 +89,14 @@ export function LikedSongs({
             style={[
               styles.trackArtist,
               isCurrentTrack && styles.currentTrackText,
+              { color: isCurrentTrack ? c.neonPrimary : c.onSurfaceMuted },
             ]}
             numberOfLines={1}
           >
             {item.artist}
           </Text>
-          <Text style={styles.trackDuration}>
-            {MusicAPI.formatDuration(item.duration)}
+          <Text style={[styles.trackDuration, { color: c.onSurfaceMuted }]}>
+            {MusicAPI.formatDuration((item.duration ?? 0) / 1000)}
           </Text>
         </View>
 
@@ -101,7 +108,7 @@ export function LikedSongs({
             <Ionicons
               name="heart"
               size={20}
-              color="#1DB954"
+              color={c.neonSecondary}
             />
           </TouchableOpacity>
 
@@ -112,7 +119,7 @@ export function LikedSongs({
             <Ionicons
               name={isCurrentTrack && isPlaying ? "pause" : "play"}
               size={20}
-              color={isCurrentTrack ? "#1DB954" : "#888"}
+              color={isCurrentTrack ? c.neonPrimary : c.onSurfaceMuted}
             />
           </TouchableOpacity>
         </View>
@@ -129,20 +136,17 @@ export function LikedSongs({
         transform: [{ scale: headerScale }],
       }
     ]}>
-      <LinearGradient
-        colors={['#7C3AED', '#2563EB', '#1D4ED8']}
-        style={styles.headerGradient}
-      >
+      <GlassCard neon="secondary" padding={space.lg} style={styles.headerGradient}>
         <View style={styles.headerContent}>
           <View style={styles.headerIcon}>
-            <Ionicons name="heart" size={80} color="#fff" />
+            <Ionicons name="heart" size={74} color={c.neonSecondary} />
           </View>
-          <Text style={styles.headerTitle}>{t('components.liked_songs')}</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerTitle, { color: c.onSurface }]}>{t('components.liked_songs')}</Text>
+          <Text style={[styles.headerSubtitle, { color: c.onSurfaceMuted }]}>
             {likedSongs.length} {likedSongs.length !== 1 ? t('components.songs') : t('components.song')}
           </Text>
         </View>
-      </LinearGradient>
+      </GlassCard>
     </Animated.View>
   );
 
@@ -151,13 +155,7 @@ export function LikedSongs({
 
     return (
       <View style={styles.playAllContainer}>
-        <TouchableOpacity
-          style={styles.playAllButton}
-          onPress={() => onTrackSelect(likedTracks[0], likedTracks, 0)}
-        >
-          <Ionicons name="play" size={24} color="#fff" />
-          <Text style={styles.playAllText}>{t('components.play_all')}</Text>
-        </TouchableOpacity>
+        <NeonButton title={t('components.play_all')} onPress={() => onTrackSelect(likedTracks[0], likedTracks, 0)} />
       </View>
     );
   };
@@ -211,7 +209,6 @@ export function LikedSongs({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
   listContainer: {
     flexGrow: 1,
@@ -227,7 +224,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 16,
   },
   headerContent: {
     alignItems: 'center',
@@ -236,74 +232,57 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...type.headline,
     marginBottom: 8,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.8,
+    ...type.body,
   },
   playAllContainer: {
     paddingHorizontal: 16,
     marginBottom: 20,
   },
   playAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1DB954',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
+    /* replaced by NeonButton */
   },
   playAllText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+    /* replaced by NeonButton */
   },
   trackItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radii.md,
     marginVertical: 2,
     marginHorizontal: 4,
   },
   currentTrackItem: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   albumCover: {
     width: 50,
     height: 50,
-    borderRadius: 4,
-    marginRight: 12,
+    borderRadius: radii.sm,
+    marginRight: space.md,
   },
   trackInfo: {
     flex: 1,
     justifyContent: 'center',
   },
   trackTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    ...type.bodyMedium,
     marginBottom: 2,
   },
   trackArtist: {
-    fontSize: 14,
-    color: '#888',
+    ...type.label,
     marginBottom: 2,
   },
   trackDuration: {
-    fontSize: 12,
-    color: '#666',
+    ...type.label,
   },
   currentTrackText: {
-    color: '#1DB954',
+    /* color set at callsite */
   },
   trackActions: {
     flexDirection: 'row',
@@ -325,21 +304,17 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...type.title,
     marginTop: 24,
     marginBottom: 12,
   },
   emptySubtitle: {
-    fontSize: 16,
-    color: '#888',
+    ...type.body,
     textAlign: 'center',
     marginBottom: 16,
   },
   emptyHint: {
-    fontSize: 14,
-    color: '#666',
+    ...type.body,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -349,7 +324,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#888',
-    fontSize: 16,
+    ...type.body,
   },
 }); 
